@@ -3,7 +3,9 @@
 A Windows Desktop app for sorting photos from iCloud into folders.
 
 ## Installation
-TODO
+```bash
+pip install requirements.txt
+```
 
 ### Prerequisites
 
