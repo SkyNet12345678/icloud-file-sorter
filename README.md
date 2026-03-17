@@ -15,6 +15,8 @@ TODO
  
 TODO
 
-## Tests
+## Run tests
 
-TODO
+```bash
+pytest
+```
