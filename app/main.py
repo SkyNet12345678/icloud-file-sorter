@@ -1,4 +1,4 @@
-from icloud.auth import icloud_login
+from app.icloud.auth import icloud_login
 
 
 def main():
