@@ -1,9 +1,18 @@
-from pyicloud import PyiCloudService
+from icloud.auth import icloud_login
+
 
 def main():
-    print("Project started successfully.")
-    print("pyicloud import works.")
+    apple_id = input("Apple ID: ")
+    password = input("Password: ")
+
+    api = icloud_login(apple_id, password)
+
+    if not api:
+        print("Login failed")
+        return
+
+    print("Logged in!")
+
 
 if __name__ == "__main__":
     main()
-    
