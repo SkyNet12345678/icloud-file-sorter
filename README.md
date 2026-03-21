@@ -1,22 +1,30 @@
 # iCloud Sorter
 
-A Windows Desktop app for sorting photos from iCloud into folders.
+A desktop app for sorting photos from iCloud into folders.
+
+## Prerequisites
+
+- Python 3.11+
+- Node.js
+- iCloud for Windows
 
 ## Installation
+
 ```bash
-pip install requirements.txt
+pip install -r requirements.txt
+cd frontend && npm install
 ```
 
-### Prerequisites
-
-TODO
-
 ## Usage
- 
+
 TODO
 
 ## Run tests
 
 ```bash
+# Python tests
 pytest
+
+# Frontend tests
+cd frontend && npm test
 ```
