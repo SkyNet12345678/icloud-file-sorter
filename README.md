@@ -60,7 +60,23 @@ python3 -m pip install -e .
 
 ## Linux developer setup
 
-On Linux, `pywebview` needs a GUI backend. Install one of these:
+On Linux, the base project install is not enough for the desktop app.
+`pywebview` also needs a GUI backend installed in the same virtual environment.
+
+Recommended default:
+
+```bash
+python3 -m pip install -e .
+python3 -m pip install "pywebview[qt]"
+```
+
+Then run:
+
+```bash
+python3 -m app.main
+```
+
+Alternative backend options:
 
 Qt backend:
 
@@ -77,11 +93,9 @@ python3 -m pip install "pywebview[gtk]"
 If Python packages alone are not enough on your distro, install the matching
 system GUI libraries as well. The exact package names vary by distro.
 
-After that, run:
-
-```bash
-python3 -m app.main
-```
+If `python3 -m app.main` fails with a message saying Qt or GTK is required, the
+first thing to check is whether you ran `python3 -m pip install "pywebview[qt]"`
+inside the project virtual environment.
 
 ## macOS developer setup
 
