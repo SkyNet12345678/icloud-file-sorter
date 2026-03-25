@@ -2,50 +2,157 @@
 
 A desktop app for sorting photos from iCloud into folders.
 
-## What this repo looks like today
+## Current architecture
 
-- `app/` is currently a Python CLI that authenticates with iCloud.
-- `frontend/` now contains a minimal Vite + React UI entrypoint.
-- The native `pywebview` shell is not wired up yet.
+- `app/` contains the Python desktop app and iCloud integration.
+- `app/main.py` starts the desktop app by default.
+- `app/main.py --auth-cli` runs the old terminal auth flow.
+- `app/webview_app.py` opens the React UI in `pywebview`.
+- `frontend/` contains the React UI built with Vite.
 
-That matters for Docker: the right split for this project is to containerize the
-tooling and web UI, not the native desktop window.
+In development, the desktop app runs on the host machine and the React dev
+server can run in Docker. This is the recommended setup for a team working on
+macOS and Linux while targeting Windows for release.
 
-## Recommended Docker development model
+## Repository layout
 
-For a `pywebview + React` desktop app, use Docker for:
+- `app/main.py`: desktop entrypoint
+- `app/webview_app.py`: chooses between the Vite dev server and built frontend files
+- `app/icloud/`: iCloud auth and backend logic
+- `frontend/src/`: React application code
+- `tests/`: Python tests
+- `docker-compose.yml`: shared Docker workflow for frontend and Python tooling
 
-- Python dependency consistency
-- Python tests and linting
-- React/Vite development
-- Shared team onboarding on macOS and Linux
+## Development model
 
-Do not use Docker as the primary way to run the desktop shell itself:
+Use Docker for:
 
-- `pywebview` needs direct access to host GUI APIs
-- macOS does not provide a practical Docker GUI path for native desktop work
-- Linux GUI containers are possible, but not a good team default
-- your production target is Windows, which means packaging should happen on
-  Windows CI or a Windows VM anyway
+- React development
+- frontend tests
+- Python tooling and team consistency
 
-## Prerequisites
+Use the host machine for:
 
-- Docker with Compose support
-- A local Python install for the eventual native `pywebview` shell
-- iCloud for Windows on the machine that will run the final packaged app
+- running `pywebview`
+- native desktop debugging
+- platform-specific GUI troubleshooting
 
-## Docker workflows
+Do not expect the desktop window itself to run reliably inside Docker on macOS.
+For Linux, GUI containers are possible but are not the project default.
 
-Build the Python image:
+## Python setup
+
+The Python app must run in a virtual environment on the host machine.
+
+Create and activate a virtual environment:
 
 ```bash
-docker compose build python-dev
+python3 -m venv venv
+source venv/bin/activate
+python3 -m pip install --upgrade pip
 ```
 
-Start the React dev server in Docker:
+Install project dependencies:
+
+```bash
+python3 -m pip install -e .
+```
+
+## Linux developer setup
+
+On Linux, `pywebview` needs a GUI backend. Install one of these:
+
+Qt backend:
+
+```bash
+python3 -m pip install "pywebview[qt]"
+```
+
+GTK backend:
+
+```bash
+python3 -m pip install "pywebview[gtk]"
+```
+
+If Python packages alone are not enough on your distro, install the matching
+system GUI libraries as well. The exact package names vary by distro.
+
+After that, run:
+
+```bash
+python3 -m app.main
+```
+
+## macOS developer setup
+
+Use a normal Python install such as Homebrew Python, not the system Python that
+ships with macOS.
+
+Example:
+
+```bash
+brew install python
+python3 -m venv venv
+source venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -e .
+python3 -m app.main
+```
+
+If `pywebview` opens but keyboard focus or app switching behaves strangely,
+double-check that you are not using the built-in macOS Python.
+
+## Frontend development
+
+Frontend code lives in `frontend/`.
+
+Main files:
+
+- `frontend/src/App.jsx`
+- `frontend/src/main.jsx`
+- `frontend/index.html`
+
+Start the frontend dev server in Docker:
 
 ```bash
 docker compose up frontend-dev
+```
+
+That exposes the Vite app on `http://127.0.0.1:5173`.
+
+While that server is running, the desktop app will use it automatically in
+default `auto` mode:
+
+```bash
+python3 -m app.main
+```
+
+Run frontend tests:
+
+```bash
+docker compose run --rm frontend-test
+```
+
+## Backend development
+
+Backend code lives in `app/`.
+
+Main areas:
+
+- `app/webview_app.py`: desktop window bootstrapping
+- `app/icloud/auth.py`: iCloud authentication
+- `app/main.py`: command-line entrypoint and mode selection
+
+Run the desktop app:
+
+```bash
+python3 -m app.main
+```
+
+Run the terminal auth flow directly:
+
+```bash
+python3 -m app.main --auth-cli
 ```
 
 Run Python tests in Docker:
@@ -54,46 +161,98 @@ Run Python tests in Docker:
 docker compose run --rm python-test
 ```
 
-Run frontend tests in Docker:
-
-```bash
-docker compose run --rm frontend-test
-```
-
-Open an interactive Python dev shell in Docker:
+Open an interactive Python shell in the project container:
 
 ```bash
 docker compose run --rm python-dev
 ```
 
-## How the desktop app should work in development
+## How the UI is selected
 
-Once you add the actual `pywebview` shell, the development loop should be:
+`app/webview_app.py` uses these rules:
 
-1. Run `docker compose up frontend-dev`
-2. Run the Python desktop app on the host machine
-3. Have `pywebview` open `http://localhost:5173` in development
-4. In production, load built frontend assets from `frontend/dist`
+- `APP_UI_MODE=auto`: use the Vite dev server if reachable, otherwise use `frontend/dist/index.html`
+- `APP_UI_MODE=dev`: always use the dev server
+- `APP_UI_MODE=prod`: always use built frontend assets
+- `APP_UI_DEV_SERVER_URL`: override the default dev server URL
 
-This keeps the native window local while still giving the team a shared,
-containerized frontend and Python toolchain.
-
-## Local Python setup
-
-If you need to run the current CLI directly on the host:
+Examples:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-python -m app.main
+APP_UI_MODE=dev python3 -m app.main
+APP_UI_MODE=prod python3 -m app.main
+APP_UI_DEV_SERVER_URL=http://127.0.0.1:5173 python3 -m app.main
 ```
 
-## Findings from the current repo
+Build frontend assets for production-mode local testing:
 
-- The previous `Dockerfile` ran `pip install .` before copying `app/`, so the
-  image build was not valid.
-- The previous `docker-compose.yml` only wrapped the Python CLI and did not
-  reflect a `pywebview + React` development workflow.
-- The frontend package had test tooling but no Vite dev script or UI entrypoint,
-  so there was nothing meaningful to run in a frontend container.
+```bash
+cd frontend
+npm run build
+cd ..
+APP_UI_MODE=prod python3 -m app.main
+```
+
+## Typical workflows
+
+Backend-only work:
+
+```bash
+source venv/bin/activate
+python3 -m app.main --auth-cli
+docker compose run --rm python-test
+```
+
+Frontend-only work:
+
+```bash
+docker compose up frontend-dev
+```
+
+Desktop integration work:
+
+```bash
+docker compose up frontend-dev
+source venv/bin/activate
+python3 -m app.main
+```
+
+## Troubleshooting
+
+`python3 -m app.main` says `pywebview is not installed`:
+
+```bash
+python3 -m pip install -e .
+```
+
+`python3 -m app.main` says Qt or GTK is required on Linux:
+
+```bash
+python3 -m pip install "pywebview[qt]"
+```
+
+or
+
+```bash
+python3 -m pip install "pywebview[gtk]"
+```
+
+`python3 -m app.main --auth-cli` says `pyicloud is not installed`:
+
+```bash
+python3 -m pip install -e .
+```
+
+The app opens old built files instead of the live frontend:
+
+- make sure `docker compose up frontend-dev` is running
+- verify `http://127.0.0.1:5173` opens in a browser
+- force dev mode with `APP_UI_MODE=dev`
+
+## Notes for the team
+
+- Linux developers need a `pywebview` backend installed locally.
+- macOS developers should use Homebrew Python or another non-system Python.
+- Frontend work should generally use Docker.
+- Desktop integration work should run Python locally on the host.
+- Windows packaging should be handled on Windows CI or a Windows machine.

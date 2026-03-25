@@ -67,7 +67,13 @@ def resolve_ui_target() -> str:
 
 
 def launch_webview() -> None:
-    import webview
+    try:
+        import webview
+    except ModuleNotFoundError as exc:
+        if exc.name == "webview":
+            msg = "pywebview is not installed in this Python environment. Run `pip install -e .` first."
+            raise RuntimeError(msg) from exc
+        raise
 
     webview.create_window(
         DEFAULT_WINDOW_TITLE,
