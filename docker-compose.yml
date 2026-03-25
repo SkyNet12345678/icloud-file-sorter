@@ -1,12 +1,52 @@
 services:
-  app:
+  python-dev:
     build:
       context: .
-    container_name: icloud-webview-app
-    working_dir: /app
+      dockerfile: Dockerfile
+    working_dir: /workspace
     volumes:
-      - .:/app
+      - .:/workspace
+      - pip-cache:/root/.cache/pip
     environment:
+      PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
-    command: python -m app.main
-    
+    stdin_open: true
+    tty: true
+    command: bash
+
+  python-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - pip-cache:/root/.cache/pip
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    command: pytest -q
+
+  frontend-dev:
+    image: node:20-bookworm-slim
+    working_dir: /workspace/frontend
+    volumes:
+      - .:/workspace
+      - frontend-node-modules:/workspace/frontend/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    command: bash -lc "npm ci && npm run dev"
+
+  frontend-test:
+    image: node:20-bookworm-slim
+    working_dir: /workspace/frontend
+    volumes:
+      - .:/workspace
+      - frontend-node-modules:/workspace/frontend/node_modules
+    command: bash -lc "npm ci && npm test"
+
+volumes:
+  pip-cache:
+  frontend-node-modules:
