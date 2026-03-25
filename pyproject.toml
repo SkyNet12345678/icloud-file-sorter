@@ -18,6 +18,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pyicloud",
     "pywebview",
+    "pytest",
 ]
 
 [tool.setuptools]
