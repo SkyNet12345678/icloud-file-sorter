@@ -3,8 +3,11 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any
 from urllib.error import URLError
 from urllib.request import urlopen
+
+from app.icloud.auth import ICloudAuthenticator
 
 DEFAULT_WINDOW_TITLE = "iCloud Sorter"
 DEFAULT_DEV_SERVER_URL = "http://127.0.0.1:5173"
@@ -66,6 +69,17 @@ def resolve_ui_target() -> str:
     )
 
 
+class DesktopApi:
+    def __init__(self) -> None:
+        self.authenticator = ICloudAuthenticator()
+
+    def login(self, apple_id: str, password: str) -> dict[str, Any]:
+        return self.authenticator.login(apple_id, password)
+
+    def submit_2fa_code(self, code: str) -> dict[str, Any]:
+        return self.authenticator.submit_2fa_code(code)
+
+
 def launch_webview() -> None:
     try:
         import webview
@@ -78,6 +92,7 @@ def launch_webview() -> None:
     webview.create_window(
         DEFAULT_WINDOW_TITLE,
         url=resolve_ui_target(),
+        js_api=DesktopApi(),
         width=1280,
         height=800,
     )

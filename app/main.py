@@ -6,13 +6,7 @@ from app.webview_app import launch_webview
 
 
 def run_auth_cli() -> None:
-    try:
-        from app.icloud.auth import icloud_login
-    except ModuleNotFoundError as exc:
-        if exc.name == "pyicloud":
-            msg = "pyicloud is not installed in this Python environment. Run `pip install -e .` first."
-            raise RuntimeError(msg) from exc
-        raise
+    from app.icloud.auth import icloud_login
 
     apple_id = input("Apple ID: ")
     password = input("Password: ")

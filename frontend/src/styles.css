@@ -1,0 +1,249 @@
+:root {
+  color-scheme: light;
+  --page-bg: #f3ede0;
+  --panel-bg: rgba(255, 251, 244, 0.92);
+  --text-main: #1f2421;
+  --text-muted: #5f665f;
+  --line: rgba(31, 36, 33, 0.12);
+  --accent: #0e6655;
+  --accent-soft: rgba(14, 102, 85, 0.12);
+  --danger: #a12d25;
+  --danger-soft: rgba(161, 45, 37, 0.12);
+  --warning: #9f6a06;
+  --warning-soft: rgba(159, 106, 6, 0.14);
+  --success: #1f6b37;
+  --success-soft: rgba(31, 107, 55, 0.12);
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(14, 102, 85, 0.18), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(159, 106, 6, 0.18), transparent 30%),
+    var(--page-bg);
+  color: var(--text-main);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+code {
+  font-family: "SFMono-Regular", "Menlo", monospace;
+  font-size: 0.92em;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.shell {
+  width: min(960px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 48px 0 64px;
+}
+
+.hero {
+  margin-bottom: 28px;
+}
+
+.eyebrow,
+.section-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.hero h1,
+.panel h2,
+.success-state h3,
+.two-factor-card h3 {
+  font-family: "Iowan Old Style", "Palatino Linotype", serif;
+}
+
+.hero h1 {
+  margin: 0;
+  max-width: 11ch;
+  font-size: clamp(40px, 7vw, 72px);
+  line-height: 0.95;
+}
+
+.lede {
+  max-width: 640px;
+  margin: 18px 0 0;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.panel {
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--panel-bg);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 24px 80px rgba(31, 36, 33, 0.1);
+}
+
+.panel-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.panel-header h2,
+.success-state h3,
+.two-factor-card h3 {
+  margin: 0;
+  font-size: 30px;
+}
+
+.pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pill.live {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.pill.offline {
+  background: rgba(31, 36, 33, 0.08);
+  color: var(--text-muted);
+}
+
+.status-banner {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  line-height: 1.5;
+}
+
+.status-banner.info {
+  background: var(--accent-soft);
+  border-color: rgba(14, 102, 85, 0.18);
+  color: var(--accent);
+}
+
+.status-banner.success {
+  background: var(--success-soft);
+  border-color: rgba(31, 107, 55, 0.18);
+  color: var(--success);
+}
+
+.status-banner.warning {
+  background: var(--warning-soft);
+  border-color: rgba(159, 106, 6, 0.2);
+  color: var(--warning);
+}
+
+.status-banner.danger {
+  background: var(--danger-soft);
+  border-color: rgba(161, 45, 37, 0.18);
+  color: var(--danger);
+}
+
+.form-grid,
+.two-factor-card,
+.success-state {
+  display: grid;
+  gap: 18px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field label {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.field input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-main);
+}
+
+.field input:focus {
+  outline: 2px solid rgba(14, 102, 85, 0.25);
+  outline-offset: 2px;
+}
+
+.primary-button,
+.secondary-button {
+  width: fit-content;
+  min-width: 160px;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary-button {
+  background: var(--text-main);
+  color: #fffdf9;
+}
+
+.secondary-button {
+  background: var(--accent);
+  color: #fffdf9;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.two-factor-card {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.success-state p,
+.two-factor-card p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    width: min(100%, calc(100% - 20px));
+    padding-top: 24px;
+  }
+
+  .panel {
+    padding: 20px;
+    border-radius: 22px;
+  }
+
+  .panel-header {
+    flex-direction: column;
+  }
+}
