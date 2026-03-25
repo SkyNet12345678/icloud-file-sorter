@@ -168,6 +168,50 @@ code {
   gap: 18px;
 }
 
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.summary-card strong {
+  font-size: 18px;
+}
+
+.summary-card span {
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.service-list {
+  display: grid;
+  gap: 10px;
+}
+
+.service-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.service-pill {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(31, 36, 33, 0.08);
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .field {
   display: grid;
   gap: 8px;

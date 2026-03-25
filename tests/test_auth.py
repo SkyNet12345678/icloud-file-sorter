@@ -16,7 +16,9 @@ class FakePyiCloudService:
             raise FakeLoginFailure("bad credentials")
 
         self.apple_id = apple_id
+        self.account_name = apple_id
         self.password = password
+        self.data = {"dsInfo": {}, "webservices": {}}
         self.requires_2fa = type(self).requires_2fa
         self.is_trusted_session = type(self).is_trusted_session
         self.trust_session_called = False
@@ -70,6 +72,25 @@ def test_login_requires_two_factor(monkeypatch):
     FakePyiCloudService.requires_2fa = False
 
 
+def test_login_success_includes_session_summary(monkeypatch):
+    stub_pycloud(monkeypatch)
+
+    authenticator = auth.ICloudAuthenticator()
+    authenticator.api = None
+    result = authenticator.login("test@example.com", "secret")
+
+    assert result["ok"] is True
+    assert result["session_summary"] == {
+        "account_name": "test@example.com",
+        "display_name": "test@example.com",
+        "trusted_session": True,
+        "available_services": [],
+        "storage": None,
+        "paired_device_count": None,
+        "family_member_count": None,
+    }
+
+
 def test_submit_2fa_code_trusts_session(monkeypatch):
     stub_pycloud(monkeypatch)
     FakePyiCloudService.requires_2fa = True
@@ -84,6 +105,15 @@ def test_submit_2fa_code_trusts_session(monkeypatch):
         "ok": True,
         "message": "Logged in.",
         "requires_2fa": False,
+        "session_summary": {
+            "account_name": "test@example.com",
+            "display_name": "test@example.com",
+            "trusted_session": True,
+            "available_services": [],
+            "storage": None,
+            "paired_device_count": None,
+            "family_member_count": None,
+        },
     }
     assert authenticator.api.trust_session_called is True
 

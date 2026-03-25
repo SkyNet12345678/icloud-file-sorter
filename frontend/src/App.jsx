@@ -12,6 +12,23 @@ function getErrorMessage(error) {
   return "Unexpected error. Check the Python process output for details.";
 }
 
+function formatBytes(bytes) {
+  if (typeof bytes !== "number") {
+    return "Unavailable";
+  }
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
 function StatusBanner({ tone, children }) {
   if (!children) {
     return null;
@@ -30,6 +47,7 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [statusTone, setStatusTone] = useState("info");
+  const [sessionSummary, setSessionSummary] = useState(null);
 
   useEffect(() => {
     if (getDesktopApi()) {
@@ -65,6 +83,7 @@ export default function App() {
 
       setRequiresTwoFactor(Boolean(result.requires_2fa));
       setIsLoggedIn(Boolean(result.ok));
+      setSessionSummary(result.session_summary ?? null);
       setStatusTone(result.ok ? "success" : result.requires_2fa ? "info" : "danger");
       setStatusMessage(result.message);
 
@@ -96,6 +115,7 @@ export default function App() {
 
       setRequiresTwoFactor(Boolean(result.requires_2fa));
       setIsLoggedIn(Boolean(result.ok));
+      setSessionSummary(result.session_summary ?? null);
       setStatusTone(result.ok ? "success" : result.requires_2fa ? "info" : "danger");
       setStatusMessage(result.message);
 
@@ -144,11 +164,68 @@ export default function App() {
         {isLoggedIn ? (
           <div className="success-state">
             <p className="section-label">Session</p>
-            <h3>Authentication complete</h3>
-            <p>
-              The iCloud session is active in the Python process. The next step is
-              to replace this placeholder with the actual sorting workflow.
-            </p>
+            <h3>{sessionSummary?.display_name ?? "Authentication complete"}</h3>
+            <p>The iCloud session is active in the Python process.</p>
+
+            <div className="summary-grid">
+              <article className="summary-card">
+                <p className="section-label">Apple ID</p>
+                <strong>{sessionSummary?.account_name ?? "Unavailable"}</strong>
+              </article>
+
+              <article className="summary-card">
+                <p className="section-label">Trusted session</p>
+                <strong>{sessionSummary?.trusted_session ? "Yes" : "No"}</strong>
+              </article>
+
+              <article className="summary-card">
+                <p className="section-label">Storage used</p>
+                <strong>
+                  {sessionSummary?.storage
+                    ? `${formatBytes(sessionSummary.storage.used_bytes)} / ${formatBytes(sessionSummary.storage.total_bytes)}`
+                    : "Unavailable"}
+                </strong>
+                <span>
+                  {sessionSummary?.storage
+                    ? `${sessionSummary.storage.used_percent}% used`
+                    : "Storage information not available"}
+                </span>
+              </article>
+
+              <article className="summary-card">
+                <p className="section-label">Storage free</p>
+                <strong>
+                  {sessionSummary?.storage
+                    ? formatBytes(sessionSummary.storage.available_bytes)
+                    : "Unavailable"}
+                </strong>
+              </article>
+
+              <article className="summary-card">
+                <p className="section-label">Paired devices</p>
+                <strong>
+                  {sessionSummary?.paired_device_count ?? "Unavailable"}
+                </strong>
+              </article>
+
+              <article className="summary-card">
+                <p className="section-label">Family members</p>
+                <strong>
+                  {sessionSummary?.family_member_count ?? "Unavailable"}
+                </strong>
+              </article>
+            </div>
+
+            <div className="service-list">
+              <p className="section-label">Available services</p>
+              <div className="service-pills">
+                {(sessionSummary?.available_services ?? []).map((service) => (
+                  <span key={service} className="service-pill">
+                    {service}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
           <>

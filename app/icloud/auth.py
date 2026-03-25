@@ -35,6 +35,50 @@ class ICloudAuthenticator:
     def __init__(self) -> None:
         self.api = None
 
+    def _build_session_summary(self) -> dict[str, Any]:
+        if self.api is None:
+            return {}
+
+        ds_info = self.api.data.get("dsInfo", {})
+        display_name = " ".join(
+            part for part in [ds_info.get("firstName"), ds_info.get("lastName")] if part
+        )
+
+        summary = {
+            "account_name": self.api.account_name,
+            "display_name": display_name or self.api.account_name,
+            "trusted_session": bool(self.api.is_trusted_session),
+            "available_services": sorted(self.api.data.get("webservices", {}).keys()),
+        }
+
+        try:
+            usage = self.api.account.storage.usage
+            summary["storage"] = {
+                "used_bytes": usage.used_storage_in_bytes,
+                "available_bytes": usage.available_storage_in_bytes,
+                "total_bytes": usage.total_storage_in_bytes,
+                "used_percent": usage.used_storage_in_percent,
+            }
+        except Exception:  # noqa: BLE001
+            summary["storage"] = None
+
+        try:
+            summary["paired_device_count"] = len(self.api.account.devices)
+        except Exception:  # noqa: BLE001
+            summary["paired_device_count"] = None
+
+        try:
+            summary["family_member_count"] = len(self.api.account.family)
+        except Exception:  # noqa: BLE001
+            summary["family_member_count"] = None
+
+        return summary
+
+    def _success_response(self, message: str) -> dict[str, Any]:
+        response = AuthResponse(ok=True, message=message).as_dict()
+        response["session_summary"] = self._build_session_summary()
+        return response
+
     def login(self, apple_id: str, password: str) -> dict[str, Any]:
         PyiCloudService, PyiCloudFailedLoginException = _get_pycloud_modules()
 
@@ -51,7 +95,7 @@ class ICloudAuthenticator:
                 requires_2fa=True,
             ).as_dict()
 
-        return AuthResponse(ok=True, message="Logged in.").as_dict()
+        return self._success_response("Logged in.")
 
     def submit_2fa_code(self, code: str) -> dict[str, Any]:
         if self.api is None:
@@ -73,7 +117,7 @@ class ICloudAuthenticator:
         if not self.api.is_trusted_session:
             self.api.trust_session()
 
-        return AuthResponse(ok=True, message="Logged in.").as_dict()
+        return self._success_response("Logged in.")
 
 
 def icloud_login(apple_id: str, password: str):
