@@ -1,3 +1,4 @@
+import os
 import tempfile
 from pyicloud import PyiCloudService
 from pyicloud.exceptions import PyiCloudFailedLoginException
@@ -5,8 +6,16 @@ from pyicloud.exceptions import PyiCloudFailedLoginException
 
 def icloud_login(apple_id: str, password: str):
     try:
-        session_dir = tempfile.mkdtemp()  # new folder every run to force 2fa
+        # Determine session_dir based on ENV
+        if os.environ.get("ENV") == "dev":
+            session_dir = tempfile.mkdtemp()  # new folder every run → forces 2FA
+            print(f"[DEV] Using temporary session dir: {session_dir}")
+        else:
+            session_dir = None  # default persistent directory
+            print("[PROD] Using default persistent session directory")
+
         api = PyiCloudService(apple_id, password, cookie_directory=session_dir)
+
     except PyiCloudFailedLoginException as e:
         print("Login failed:", str(e))
         return None

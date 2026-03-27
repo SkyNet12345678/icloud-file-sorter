@@ -12,6 +12,7 @@ pip install -e .
 
 ## Run locally
 ```bash
+export ENV=dev # to run in dev mode
 python -m app.main # or python3 if needed
 ```
 
