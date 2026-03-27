@@ -1,23 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <title>iCloud Login</title>
-    <script defer src="js/login.js"></script>
-  </head>
-  <body>
-    <h2>iCloud Login</h2>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iCloud Photo Downloader</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script defer src="js/login.js"></script>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="apple-logo"></div>
+      <h1>iCloud Photo Downloader</h1>
+      <h2>Sign in with Apple ID</h2>
 
-    <div id="login-form">
-      <input id="appleId" placeholder="Apple ID" /><br /><br />
-      <input id="password" type="password" placeholder="Password" /><br /><br />
-      <button id="loginBtn">Login</button>
+      <div id="login-form">
+        <input id="appleId" type="text" placeholder="Apple ID" />
+        <input id="password" type="password" placeholder="Password" />
+        <button id="loginBtn">Sign In</button>
+      </div>
+
+      <div id="2fa-form" style="display: none;">
+        <input id="2faCode" type="text" placeholder="Enter 2FA Code" />
+        <button id="verifyBtn">Verify 2FA</button>
+      </div>
+
+      <div class="disclaimer">
+        ⚠️ Credential Disclaimer: Your credentials are sent to our server. 
+        This is a school project — use at your own risk.
+      </div>
+
+      <p id="status" class="status-message"></p>
     </div>
-
-    <div id="2fa-form" style="display: none">
-      <input id="2faCode" placeholder="2FA Code" /><br /><br />
-      <button id="verifyBtn">Verify 2FA</button>
-    </div>
-
-    <p id="status"></p>
-  </body>
+  </div>
+</body>
 </html>
