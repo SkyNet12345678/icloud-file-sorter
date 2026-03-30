@@ -18,4 +18,4 @@ def icloud_login(apple_id: str, password: str):
         print("Login failed:", str(e))
         return None
 
-    return api 
+    return api

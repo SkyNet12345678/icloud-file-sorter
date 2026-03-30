@@ -70,6 +70,16 @@ body, html {
   background-color: #005fa3;
 }
 
+.secondary-btn {
+  margin-top: 8px;
+  background-color: #ddd;
+  color: #333;
+}
+
+.secondary-btn:hover {
+  background-color: #ccc;
+}
+
 .disclaimer {
   margin-top: 16px;
   font-size: 12px;

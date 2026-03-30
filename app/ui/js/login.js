@@ -1,13 +1,15 @@
 document.addEventListener('DOMContentLoaded', () => {
   const loginBtn = document.getElementById('loginBtn');
   const verifyBtn = document.getElementById('verifyBtn');
+  const restartBtn = document.getElementById('restartBtn');
 
   loginBtn.addEventListener('click', login);
   verifyBtn.addEventListener('click', submit2FA);
+  restartBtn.addEventListener('click', restartLogin);
 });
 
 async function login() {
-  if (!window.pywebview || !window.pywebview.api) {
+  if (!globalThis.pywebview?.api) {
     console.log('Bridge not ready');
     return;
   }
@@ -15,7 +17,7 @@ async function login() {
   const appleId = document.getElementById('appleId').value;
   const password = document.getElementById('password').value;
 
-  const result = await window.pywebview.api.login(appleId, password);
+  const result = await globalThis.pywebview.api.login(appleId, password);
 
   console.log(result);
 
@@ -36,7 +38,7 @@ async function submit2FA() {
 
   document.getElementById('status').innerText = 'Verifying...';
 
-  const result = await window.pywebview.api.verify_2fa(code);
+  const result = await globalThis.pywebview.api.verify_2fa(code);
 
   console.log(result);
 
@@ -46,4 +48,10 @@ async function submit2FA() {
   } else {
     document.getElementById('status').innerText = result.message;
   }
+}
+
+function restartLogin() {
+  document.getElementById('2fa-form').style.display = 'none';
+  document.getElementById('login-form').style.display = 'block';
+  document.getElementById('status').innerText = 'Please sign in again.';
 }
