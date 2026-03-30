@@ -1,5 +1,6 @@
 from app.icloud.auth import icloud_login
 
+
 class AuthApi:
     def __init__(self):
             self.api = None
@@ -39,7 +40,7 @@ class AuthApi:
                 self.api = self.temp_session
                 self.temp_session = None
 
-                return {"success": True, "message": "Logged in"}
-
-            except Exception as e:
+            except ValueError as e:
                 return {"success": False, "message": str(e)}
+            else:
+                return {"success": True, "message": "Logged in"}
