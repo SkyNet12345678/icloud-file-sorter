@@ -6,6 +6,8 @@ from pyicloud.exceptions import PyiCloudFailedLoginException
 
 
 def icloud_login(apple_id: str, password: str):
+    if not apple_id or not password:
+        return {"success": False, "message": "Missing credentials"}
     try:
         if os.environ.get("ENV") == "dev":
             session_dir = tempfile.mkdtemp()
@@ -15,8 +17,15 @@ def icloud_login(apple_id: str, password: str):
 
         api = PyiCloudService(apple_id, password, cookie_directory=session_dir)
 
-    except PyiCloudFailedLoginException as e:
-        print("Login failed:", str(e))
-        return None
+    except PyiCloudFailedLoginException:
+        print("Login failed.")
+        return {"success": False, "message": "Invalid Apple ID or password"}
 
-    return api
+    except Exception:
+        return {"success": False, "message": "Login failed"}
+
+    return {
+        "success": True,
+        "api": api,
+        "requires_2fa": api.requires_2fa,
+    }
