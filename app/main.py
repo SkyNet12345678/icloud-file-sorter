@@ -1,17 +1,18 @@
-from app.icloud.auth import icloud_login
+import webview
+from app.api.auth_api import AuthApi
 
 
 def main():
-    apple_id = input("Apple ID: ")
-    password = input("Password: ")
+    api = AuthApi()
 
-    api = icloud_login(apple_id, password)
+    webview.create_window(
+        "iCloud Sorter",
+        "ui/index.html",
+        js_api=api,
+    )
 
-    if not api:
-        print("Login failed")
-        return
+    webview.start()
 
-    print("Logged in!")
 
 if __name__ == "__main__":
     main()
