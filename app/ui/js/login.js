@@ -27,6 +27,7 @@ async function login() {
     return;
   }
 
+  const loginBtn = document.getElementById('loginBtn');
   const appleId = document.getElementById('appleId').value;
   const password = document.getElementById('password').value;
 
@@ -47,8 +48,6 @@ async function login() {
     return;
   }
 
-  console.log(result);
-
   loginBtn.disabled = false;
   document.getElementById('password').value = '';
 
@@ -58,7 +57,16 @@ async function login() {
   }
 
   if (result.success) {
+    // Logged in without 2FA
     await loadAlbums();
+  } else if (result['2fa_required']) {
+    // 2FA is required — show the 2FA input form
+    document.getElementById('login-form').style.display = 'none';
+    document.getElementById('2fa-form').style.display = 'block';
+    document.getElementById('status').innerText = result.message || 'Enter your verification code.';
+  } else {
+    // Other failures
+    document.getElementById('status').innerText = result.message || 'Login failed.';
   }
 }
 
