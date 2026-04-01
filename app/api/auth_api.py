@@ -16,7 +16,6 @@ class AuthApi:
 
             api = result["api"]
 
-            # 🔥 THIS is where 2FA is handled
             if result.get("requires_2fa"):
                 self.temp_session = api
                 return {
@@ -54,16 +53,3 @@ class AuthApi:
 
             return {"success": True, "message": "Logged in"}
 
-    def get_albums(self):
-        try:
-            print("get_albums called")
-
-            if not self.icloud:
-                print("icloud is None")
-                return []
-
-            return self.icloud.get_albums()
-
-        except Exception as e:
-            print("ERROR in get_albums:", e)
-            return []
