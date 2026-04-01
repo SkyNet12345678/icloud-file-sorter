@@ -33,9 +33,13 @@
         </div>
       </div>
 
-      <div id="albums-view" style="display: none">
-        <h2>Your iCloud Albums</h2>
-        <ul id="albums-list"></ul>
+      <div id="albums-view" style="display: none" class="albums-container">
+        <ul id="albums-list" class="albums-list"></ul>
+
+        <div class="albums-footer">
+          <span id="selected-count">No albums selected</span>
+          <button id="download-btn" disabled>Download Selected</button>
+        </div>
       </div>
     </div>
   </body>
