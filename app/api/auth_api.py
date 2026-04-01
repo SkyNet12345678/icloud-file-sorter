@@ -1,10 +1,12 @@
 from app.icloud.auth import icloud_login
+from app.icloud.icloud_service import ICloudService
 
 
 class AuthApi:
     def __init__(self):
             self.api = None
             self.temp_session = None
+            self.icloud = None
 
     def login(self, apple_id, password):
             result = icloud_login(apple_id, password)
@@ -24,6 +26,7 @@ class AuthApi:
                 }
 
             self.api = api
+            self.icloud = ICloudService(api)
             return {"success": True, "message": "Logged in"}
 
     def verify_2fa(self, code):
@@ -44,8 +47,23 @@ class AuthApi:
 
                 self.api = self.temp_session
                 self.temp_session = None
+                self.icloud = ICloudService(self.api)
 
             except ValueError:
                 return {"success": False, "message": "Verification failed"}
 
             return {"success": True, "message": "Logged in"}
+
+    def get_albums(self):
+        try:
+            print("get_albums called")
+
+            if not self.icloud:
+                print("icloud is None")
+                return []
+
+            return self.icloud.get_albums()
+
+        except Exception as e:
+            print("ERROR in get_albums:", e)
+            return []

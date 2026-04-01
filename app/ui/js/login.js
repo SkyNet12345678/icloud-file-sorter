@@ -45,14 +45,20 @@ async function login() {
   }
 
   if (result.success) {
-    document.getElementById('status').innerText = 'Logged in!';
-    document.getElementById('login-form').style.display = 'none';
-  } else if (result['2fa_required']) {
-    document.getElementById('login-form').style.display = 'none';
-    document.getElementById('2fa-form').style.display = 'block';
-    document.getElementById('status').innerText = result.message || '2FA required.';
-  } else {
-    document.getElementById('status').innerText = result.message || 'Login failed.';
+    document.getElementById('status').innerText = 'Loading albums...';
+
+    let albums;
+
+    try {
+      albums = await globalThis.pywebview.api.get_albums();
+    } catch (err) {
+      console.error(err);
+      document.getElementById('status').innerText = 'Failed to load albums.';
+      return;
+    }
+
+    console.log('Albums:', albums);
+    showAlbums(albums);
   }
 }
 
@@ -78,6 +84,7 @@ async function submit2FA() {
       return;
     }
 
+    console.log('Albums:', albums);
     showAlbums(albums);
   }
 }
