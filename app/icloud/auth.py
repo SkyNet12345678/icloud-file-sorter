@@ -1,34 +1,31 @@
 import os
 import tempfile
+
 from pyicloud import PyiCloudService
 from pyicloud.exceptions import PyiCloudFailedLoginException
 
 
 def icloud_login(apple_id: str, password: str):
+    if not apple_id or not password:
+        return {"success": False, "message": "Missing credentials"}
     try:
-        # Determine session_dir based on ENV
         if os.environ.get("ENV") == "dev":
-            session_dir = tempfile.mkdtemp()  # new folder every run → forces 2FA
+            session_dir = tempfile.mkdtemp()
             print(f"[DEV] Using temporary session dir: {session_dir}")
         else:
-            session_dir = None  # default persistent directory
-            print("[PROD] Using default persistent session directory")
+            session_dir = None
 
         api = PyiCloudService(apple_id, password, cookie_directory=session_dir)
 
-    except PyiCloudFailedLoginException as e:
-        print("Login failed:", str(e))
-        return None
+    except PyiCloudFailedLoginException:
+        print("Login failed.")
+        return {"success": False, "message": "Invalid Apple ID or password"}
 
-    if api.requires_2fa:
-        print("2FA required")
-        code = input("Enter 2FA code: ")
+    except Exception:
+        return {"success": False, "message": "Login failed"}
 
-        if not api.validate_2fa_code(code):
-            print("Invalid code")
-            return None
-
-        if not api.is_trusted_session:
-            api.trust_session()
-
-    return api
+    return {
+        "success": True,
+        "api": api,
+        "requires_2fa": api.requires_2fa,
+    }

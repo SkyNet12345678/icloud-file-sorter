@@ -1,37 +1,51 @@
 from app.icloud.auth import icloud_login
 
+
 class AuthApi:
     def __init__(self):
-        self.api = None
+            self.api = None
+            self.temp_session = None
 
     def login(self, apple_id, password):
-        print(f"Login called: {apple_id=}")  # debug
+            result = icloud_login(apple_id, password)
 
-        # Attempt login
-        self.api = icloud_login(apple_id, password)
+            if not result.get("success"):
+                return result
 
-        # Check if 2FA is required
-        if hasattr(self.api, "requires_2fa") and self.api.requires_2fa:
-            self.temp_session = self.api
-            return {"success": False, "2fa_required": True, "message": "2FA code required"}
+            api = result["api"]
 
-        if not self.api:
-            return {"success": False, "message": "Invalid credentials"}
+            # 🔥 THIS is where 2FA is handled
+            if result.get("requires_2fa"):
+                self.temp_session = api
+                return {
+                    "success": False,
+                    "2fa_required": True,
+                    "message": "Enter 2FA code",
+                }
 
-        return {"success": True}
+            self.api = api
+            return {"success": True, "message": "Logged in"}
 
     def verify_2fa(self, code):
-        if not self.temp_session:
-            return {"success": False, "message": "No 2FA session active"}
+            if not self.temp_session:
+                return {"success": False, "message": "No active 2FA session"}
 
-        try:
-            self.temp_session.validate_2fa_code(code)
+            if not code:
+                return {"success": False, "message": "Code required"}
 
-            if self.temp_session.is_trusted_session:
+            try:
+                valid = self.temp_session.validate_2fa_code(code)
+
+                if not valid:
+                    return {"success": False, "message": "Invalid code"}
+
+                if not self.temp_session.is_trusted_session:
+                    self.temp_session.trust_session()
+
                 self.api = self.temp_session
                 self.temp_session = None
-                return {"success": True}
-            else:
-                return {"success": False, "message": "Invalid 2FA code"}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
+
+            except ValueError:
+                return {"success": False, "message": "Verification failed"}
+
+            return {"success": True, "message": "Logged in"}
