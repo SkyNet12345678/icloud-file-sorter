@@ -8,6 +8,19 @@ document.addEventListener('DOMContentLoaded', () => {
   restartBtn.addEventListener('click', restartLogin);
 });
 
+async function loadAlbums() {
+  document.getElementById('status').innerText = 'Loading albums...';
+
+  try {
+    const albums = await globalThis.pywebview.api.get_albums();
+    console.log('Albums:', albums);
+    showAlbums(albums);
+  } catch (err) {
+    console.error(err);
+    document.getElementById('status').innerText = 'Failed to load albums.';
+  }
+}
+
 async function login() {
   if (!globalThis.pywebview?.api) {
     console.log('Bridge not ready');
@@ -45,20 +58,7 @@ async function login() {
   }
 
   if (result.success) {
-    document.getElementById('status').innerText = 'Loading albums...';
-
-    let albums;
-
-    try {
-      albums = await globalThis.pywebview.api.get_albums();
-    } catch (err) {
-      console.error(err);
-      document.getElementById('status').innerText = 'Failed to load albums.';
-      return;
-    }
-
-    console.log('Albums:', albums);
-    showAlbums(albums);
+    await loadAlbums();
   }
 }
 
@@ -72,20 +72,7 @@ async function submit2FA() {
   console.log(result);
 
   if (result.success) {
-    document.getElementById('status').innerText = 'Loading albums...';
-
-    let albums;
-
-    try {
-      albums = await globalThis.pywebview.api.get_albums();
-    } catch (err) {
-      console.error(err);
-      document.getElementById('status').innerText = 'Failed to load albums.';
-      return;
-    }
-
-    console.log('Albums:', albums);
-    showAlbums(albums);
+    await loadAlbums();
   }
 }
 
