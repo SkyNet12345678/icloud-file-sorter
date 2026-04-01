@@ -1,27 +1,6 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const loginBtn = document.getElementById('loginBtn');
-  const verifyBtn = document.getElementById('verifyBtn');
-  const restartBtn = document.getElementById('restartBtn');
+import { loadAlbums } from './albums.js';
 
-  loginBtn.addEventListener('click', login);
-  verifyBtn.addEventListener('click', submit2FA);
-  restartBtn.addEventListener('click', restartLogin);
-});
-
-async function loadAlbums() {
-  document.getElementById('status').innerText = 'Loading albums...';
-
-  try {
-    const albums = await globalThis.pywebview.api.get_albums();
-    console.log('Albums:', albums);
-    showAlbums(albums);
-  } catch (err) {
-    console.error(err);
-    document.getElementById('status').innerText = 'Failed to load albums.';
-  }
-}
-
-async function login() {
+export async function login() {
   if (!globalThis.pywebview?.api) {
     console.log('Bridge not ready');
     return;
@@ -60,7 +39,7 @@ async function login() {
     // Logged in without 2FA
     await loadAlbums();
   } else if (result['2fa_required']) {
-    // 2FA is required — show the 2FA input form
+    // Show 2FA form
     document.getElementById('login-form').style.display = 'none';
     document.getElementById('2fa-form').style.display = 'block';
     document.getElementById('status').innerText = result.message || 'Enter your verification code.';
@@ -70,36 +49,34 @@ async function login() {
   }
 }
 
-async function submit2FA() {
+export async function submit2FA() {
   const code = document.getElementById('2faCode').value;
+
+  if (!code) {
+    document.getElementById('status').innerText = 'Enter code';
+    return;
+  }
 
   document.getElementById('status').innerText = 'Verifying...';
 
-  const result = await globalThis.pywebview.api.verify_2fa(code);
-
-  console.log(result);
+  let result;
+  try {
+    result = await globalThis.pywebview.api.verify_2fa(code);
+  } catch (err) {
+    console.error(err);
+    document.getElementById('status').innerText = 'Verification failed.';
+    return;
+  }
 
   if (result.success) {
     await loadAlbums();
+  } else {
+    document.getElementById('status').innerText = result.message || 'Invalid code';
   }
 }
 
-function restartLogin() {
+export function restartLogin() {
   document.getElementById('2fa-form').style.display = 'none';
   document.getElementById('login-form').style.display = 'block';
   document.getElementById('status').innerText = 'Please sign in again.';
-}
-
-function showAlbums(albums) {
-  const list = document.getElementById('albums-list');
-  list.innerHTML = '';
-
-  albums.forEach((album) => {
-    const li = document.createElement('li');
-    li.innerText = `${album.name} (${album.count})`;
-    list.appendChild(li);
-  });
-
-  document.querySelector('.login-card').style.display = 'none';
-  document.getElementById('albums-view').style.display = 'block';
 }
