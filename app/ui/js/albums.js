@@ -46,8 +46,5 @@ export function showAlbums(albums) {
 function updateSelection() {
   const checkboxes = document.querySelectorAll('#albums-list input[type="checkbox"]');
   const selected = Array.from(checkboxes).filter((cb) => cb.checked).length;
-  const countText = selected === 0 ? 'No albums selected' : `${selected} albums selected`;
-
-  document.getElementById('selected-count').innerText = countText;
   document.getElementById('download-btn').disabled = selected === 0;
 }
