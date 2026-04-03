@@ -1,38 +1,60 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const loginBtn = document.getElementById("loginBtn");
-  const verifyBtn = document.getElementById("verifyBtn");
+export function initLoginForm({
+  doc = globalThis.document,
+  api = globalThis.pywebview?.api,
+} = {}) {
+  const loginBtn = doc.getElementById("loginBtn");
+  const verifyBtn = doc.getElementById("verifyBtn");
+  const status = doc.getElementById("status");
+  const loginForm = doc.getElementById("login-form");
+  const twoFactorForm = doc.getElementById("2fa-form");
+
+  if (!loginBtn || !verifyBtn || !status || !loginForm || !twoFactorForm) {
+    return;
+  }
+
+  const setStatus = (message) => {
+    status.textContent = message ?? "";
+  };
 
   loginBtn.addEventListener("click", async () => {
-    if (!globalThis.pywebview?.api) return;
+    if (!api?.login) return;
 
-    const appleId = document.getElementById("appleId").value;
-    const password = document.getElementById("password").value;
+    const appleId = doc.getElementById("appleId")?.value ?? "";
+    const password = doc.getElementById("password")?.value ?? "";
 
-    const result = await globalThis.pywebview.api.login(appleId, password);
+    const result = await api.login(appleId, password);
     console.log(result);
 
     if (result.success) {
-      document.getElementById("status").innerText = "Logged in!";
-      document.getElementById("login-form").style.display = "none";
+      setStatus("Logged in!");
+      loginForm.style.display = "none";
     } else if (result["2fa_required"]) {
-      document.getElementById("login-form").style.display = "none";
-      document.getElementById("2fa-form").style.display = "block";
-      document.getElementById("status").innerText = result.message;
+      loginForm.style.display = "none";
+      twoFactorForm.style.display = "block";
+      setStatus(result.message);
     } else {
-      document.getElementById("status").innerText = result.message;
+      setStatus(result.message);
     }
   });
 
   verifyBtn.addEventListener("click", async () => {
-    const code = document.getElementById("2faCode").value;
-    const result = await globalThis.pywebview.api.verify_2fa(code);
+    if (!api?.verify_2fa) return;
+
+    const code = doc.getElementById("2faCode")?.value ?? "";
+    const result = await api.verify_2fa(code);
     console.log(result);
 
     if (result.success) {
-      document.getElementById("status").innerText = result.message || "Logged in!";
-      document.getElementById("2fa-form").style.display = "none";
+      setStatus(result.message || "Logged in!");
+      twoFactorForm.style.display = "none";
     } else {
-      document.getElementById("status").innerText = result.message;
+      setStatus(result.message);
     }
   });
-});
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("DOMContentLoaded", () => {
+    initLoginForm();
+  });
+}
