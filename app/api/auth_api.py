@@ -1,5 +1,6 @@
 from app.icloud.auth import icloud_login
 
+
 class AuthApi:
     def __init__(self):
         self.api = None
