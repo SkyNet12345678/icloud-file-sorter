@@ -34,5 +34,6 @@ pytest
 
 ```bash
 cd frontend
+npm install
 npm test
 ```
