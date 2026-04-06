@@ -213,3 +213,4 @@ node_modules/
 
 # AI-related
 .codex
+AGENTS.md
