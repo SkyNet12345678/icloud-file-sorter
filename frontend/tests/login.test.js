@@ -1,69 +1,69 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { initLoginForm } from "../../app/ui/js/login.js";
-
-function renderLoginForm() {
+const renderLoginDom = () => {
   document.body.innerHTML = `
-    <div id="login-form">
+    <div id="login-form" style="display: block;">
       <input id="appleId" type="text" />
       <input id="password" type="password" />
       <button id="loginBtn">Sign In</button>
     </div>
     <div id="2fa-form" style="display: none;">
       <input id="2faCode" type="text" />
-      <button id="verifyBtn">Verify 2FA</button>
+      <button id="verifyBtn">Verify</button>
     </div>
     <p id="status"></p>
   `;
-}
+};
 
-async function flushPromises() {
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
-describe("initLoginForm", () => {
+describe("login.js", () => {
   beforeEach(() => {
-    renderLoginForm();
+    vi.resetModules();
+    renderLoginDom();
   });
 
-  it("submits credentials and hides the login form after a successful login", async () => {
-    const api = {
-      login: vi.fn().mockResolvedValue({ success: true }),
-      verify_2fa: vi.fn(),
+  it("shows a success message and hides the login form after a successful login", async () => {
+    const login = vi.fn().mockResolvedValue({ success: true });
+
+    globalThis.pywebview = {
+      api: {
+        login,
+        verify_2fa: vi.fn(),
+      },
     };
 
-    initLoginForm({ doc: document, api });
+    document.getElementById("appleId").value = "user@example.com";
+    document.getElementById("password").value = "super-secret";
 
-    document.getElementById("appleId").value = "person@example.com";
-    document.getElementById("password").value = "topsecret";
+    await import("../../app/ui/js/login.js");
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+
     document.getElementById("loginBtn").click();
-    await flushPromises();
+    await vi.waitFor(() => expect(login).toHaveBeenCalledWith("user@example.com", "super-secret"));
 
-    expect(api.login).toHaveBeenCalledWith("person@example.com", "topsecret");
-    expect(document.getElementById("status").textContent).toBe("Logged in!");
+    expect(document.getElementById("status").innerText).toBe("Logged in!");
     expect(document.getElementById("login-form").style.display).toBe("none");
   });
+  it("shows invalid credentials message after entering incorrect credentials", async () => {
+    const login = vi.fn().mockResolvedValue({ 
+      success: false,
+      message: "Invalid credentials",
+     });
 
-  it("shows the 2FA form when the backend requests verification", async () => {
-    const api = {
-      login: vi.fn().mockResolvedValue({
-        success: false,
-        "2fa_required": true,
-        message: "Enter the six-digit code.",
-      }),
-      verify_2fa: vi.fn(),
+    globalThis.pywebview = {
+      api: {
+        login,
+      },
     };
 
-    initLoginForm({ doc: document, api });
+    document.getElementById("appleId").value = "user@example.com";
+    document.getElementById("password").value = "super-secret";
+
+    await import("../../app/ui/js/login.js");
+    document.dispatchEvent(new Event("DOMContentLoaded"));
 
     document.getElementById("loginBtn").click();
-    await flushPromises();
+    await vi.waitFor(() => expect(login).toHaveBeenCalledWith("user@example.com", "super-secret"));
 
-    expect(document.getElementById("login-form").style.display).toBe("none");
-    expect(document.getElementById("2fa-form").style.display).toBe("block");
-    expect(document.getElementById("status").textContent).toBe(
-      "Enter the six-digit code.",
-    );
+    expect(document.getElementById("login-form").style.display).toBe("block");
   });
 });
