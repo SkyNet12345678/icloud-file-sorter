@@ -29,3 +29,11 @@ TODO
 ```bash
 pytest
 ```
+
+## Run frontend tests
+
+```bash
+cd frontend
+npm install
+npm test
+```
