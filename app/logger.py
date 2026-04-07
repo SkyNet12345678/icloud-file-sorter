@@ -4,7 +4,6 @@ from pathlib import Path
 
 def setup_logger():
     log_dir = Path(__file__).parent.parent / "logs"
-    print(f"Log dir: {log_dir}")
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "app.log"
 
