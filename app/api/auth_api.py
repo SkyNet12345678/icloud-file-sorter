@@ -13,7 +13,6 @@ class AuthApi:
         self.icloud = None
 
     def login(self, apple_id, password):
-        logger.info("Login attempt for %s", apple_id)
         result = icloud_login(apple_id, password)
 
         if not result.get("success"):
@@ -23,7 +22,6 @@ class AuthApi:
         api = result["api"]
 
         if api.requires_2fa:
-            logger.info("2FA required for %s", apple_id)
             self.temp_session = api
             return {
                 "success": False,
