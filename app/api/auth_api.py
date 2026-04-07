@@ -1,16 +1,20 @@
 from app.icloud.auth import icloud_login
+from app.icloud.icloud_service import ICloudService
 
 
 class AuthApi:
     def __init__(self):
             self.api = None
             self.temp_session = None
+            self.icloud = None
 
     def login(self, apple_id, password):
-            api = icloud_login(apple_id, password)
+            result = icloud_login(apple_id, password)
 
-            if not api:
-                return {"success": False, "message": "Invalid credentials"}
+            if not result.get("success"):
+                return result
+
+            api = result["api"]
 
             if api.requires_2fa:
                 self.temp_session = api
@@ -21,7 +25,8 @@ class AuthApi:
                 }
 
             self.api = api
-            return {"success": True}
+            self.icloud = ICloudService(api)
+            return {"success": True, "message": "Logged in"}
 
     def verify_2fa(self, code):
         if not self.temp_session:
@@ -29,18 +34,14 @@ class AuthApi:
 
         try:
             valid = self.temp_session.validate_2fa_code(code)
-            print(f"validate_2fa_code returned: {valid!r}")  # debug
 
             if not valid:
-                return {"success": False, "message": "Invalid code"}
+                return {"success": False, "message": "Invalid 2FA code"}
 
-            if not self.temp_session.is_trusted_session:
-                self.temp_session.trust_session()
-
+            self.temp_session.trust_session()
             self.api = self.temp_session
             self.temp_session = None
             return {"success": True, "message": "Logged in"}
 
         except Exception as e:
-            print(f"2FA error: {e!r}")
             return {"success": False, "message": str(e)}
