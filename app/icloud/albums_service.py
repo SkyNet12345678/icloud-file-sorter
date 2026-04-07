@@ -21,5 +21,5 @@ class AlbumsService:
             return albums
 
         except Exception as e:
-            logger.error("Failed to fetch albums: %s", str(e))
+            logger.exception("Failed to fetch albums: %s", str(e))
             return []
