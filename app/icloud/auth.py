@@ -5,6 +5,8 @@ from pyicloud.exceptions import PyiCloudFailedLoginException
 
 
 def icloud_login(apple_id: str, password: str):
+    if not apple_id or not password:
+        return {"success": False, "message": "Missing credentials"}
     try:
         session_dir = tempfile.mkdtemp()
 
