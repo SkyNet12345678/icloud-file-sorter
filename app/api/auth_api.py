@@ -1,18 +1,21 @@
 from app.icloud.auth import icloud_login
+from app.icloud.icloud_service import ICloudService
 
 
 class AuthApi:
     def __init__(self):
             self.api = None
             self.temp_session = None
+            self.icloud = None
 
     def login(self, apple_id, password):
-            api = icloud_login(apple_id, password)
+            result = icloud_login(apple_id, password)
 
-            if not api:
-                return {"success": False, "message": "Invalid credentials"}
+            if not result.get("success"):
+                return result
 
-            # 🔥 THIS is where 2FA is handled
+            api = result["api"]
+
             if api.requires_2fa:
                 self.temp_session = api
                 return {
@@ -22,25 +25,23 @@ class AuthApi:
                 }
 
             self.api = api
-            return {"success": True}
+            self.icloud = ICloudService(api)
+            return {"success": True, "message": "Logged in"}
 
     def verify_2fa(self, code):
-            if not self.temp_session:
-                return {"success": False, "message": "No active 2FA session"}
+        if not self.temp_session:
+            return {"success": False, "message": "No active 2FA session"}
 
-            try:
-                valid = self.temp_session.validate_2fa_code(code)
+        try:
+            valid = self.temp_session.validate_2fa_code(code)
 
-                if not valid:
-                    return {"success": False, "message": "Invalid code"}
+            if not valid:
+                return {"success": False, "message": "Invalid 2FA code"}
 
-                if not self.temp_session.is_trusted_session:
-                    self.temp_session.trust_session()
+            self.temp_session.trust_session()
+            self.api = self.temp_session
+            self.temp_session = None
+            return {"success": True, "message": "Logged in"}
 
-                self.api = self.temp_session
-                self.temp_session = None
-
-            except ValueError as e:
-                return {"success": False, "message": str(e)}
-            else:
-                return {"success": True, "message": "Logged in"}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
