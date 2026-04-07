@@ -17,9 +17,32 @@ async function login() {
   const appleId = document.getElementById('appleId').value;
   const password = document.getElementById('password').value;
 
-  const result = await globalThis.pywebview.api.login(appleId, password);
+  if (!appleId || !password) {
+    document.getElementById('status').innerText = 'Please enter credentials.';
+    return;
+  }
+
+  loginBtn.disabled = true;
+
+  let result;
+  try {
+    result = await globalThis.pywebview.api.login(appleId, password);
+  } catch (err) {
+    console.error(err);
+    document.getElementById('status').innerText = 'Login failed. Try again.';
+    loginBtn.disabled = false;
+    return;
+  }
 
   console.log(result);
+
+  loginBtn.disabled = false;
+  document.getElementById('password').value = '';
+
+  if (!result) {
+    document.getElementById('status').innerText = 'Login failed.';
+    return;
+  }
 
   if (result.success) {
     document.getElementById('status').innerText = 'Logged in!';
@@ -27,9 +50,9 @@ async function login() {
   } else if (result['2fa_required']) {
     document.getElementById('login-form').style.display = 'none';
     document.getElementById('2fa-form').style.display = 'block';
-    document.getElementById('status').innerText = result.message;
+    document.getElementById('status').innerText = result.message || '2FA required.';
   } else {
-    document.getElementById('status').innerText = result.message;
+    document.getElementById('status').innerText = result.message || 'Login failed.';
   }
 }
 
