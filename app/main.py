@@ -2,6 +2,12 @@ import webview
 
 from app.api.auth_api import AuthApi
 from app.icloud.albums_service import AlbumsService
+from app.logger import setup_logger
+
+logger= setup_logger()
+logger.info("App starting")
+
+
 
 # --- API Bridge ---
 auth_api = AuthApi()
