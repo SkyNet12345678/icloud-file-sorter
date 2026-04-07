@@ -210,3 +210,7 @@ __marimo__/
 # node/React
 my-vue-app/
 node_modules/
+
+# AI-related
+.codex
+AGENTS.md
