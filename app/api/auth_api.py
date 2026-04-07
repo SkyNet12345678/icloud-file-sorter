@@ -16,7 +16,7 @@ class AuthApi:
 
             api = result["api"]
 
-            if result.get("requires_2fa"):
+            if api.requires_2fa:
                 self.temp_session = api
                 return {
                     "success": False,
@@ -29,27 +29,19 @@ class AuthApi:
             return {"success": True, "message": "Logged in"}
 
     def verify_2fa(self, code):
-            if not self.temp_session:
-                return {"success": False, "message": "No active 2FA session"}
+        if not self.temp_session:
+            return {"success": False, "message": "No active 2FA session"}
 
-            if not code:
-                return {"success": False, "message": "Code required"}
+        try:
+            valid = self.temp_session.validate_2fa_code(code)
 
-            try:
-                valid = self.temp_session.validate_2fa_code(code)
+            if not valid:
+                return {"success": False, "message": "Invalid 2FA code"}
 
-                if not valid:
-                    return {"success": False, "message": "Invalid code"}
-
-                if not self.temp_session.is_trusted_session:
-                    self.temp_session.trust_session()
-
-                self.api = self.temp_session
-                self.temp_session = None
-                self.icloud = ICloudService(self.api)
-
-            except ValueError:
-                return {"success": False, "message": "Verification failed"}
-
+            self.temp_session.trust_session()
+            self.api = self.temp_session
+            self.temp_session = None
             return {"success": True, "message": "Logged in"}
 
+        except Exception as e:
+            return {"success": False, "message": str(e)}

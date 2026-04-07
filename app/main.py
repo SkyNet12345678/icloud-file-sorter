@@ -13,13 +13,13 @@ class API:
     def login(self, apple_id, password):
         result = auth_api.login(apple_id, password)
         if result.get("success"):
-            self.albums_service = AlbumsService(auth_api.icloud)
+            self.albums_service = AlbumsService(auth_api.api)
         return result
 
     def verify_2fa(self, code):
         result = auth_api.verify_2fa(code)
         if result.get("success"):
-            self.albums_service = AlbumsService(auth_api.icloud)
+            self.albums_service = AlbumsService(auth_api.api)
         return result
 
     def get_albums(self):
