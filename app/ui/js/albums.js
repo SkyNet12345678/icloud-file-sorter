@@ -56,7 +56,19 @@ export async function startSort() {
     console.log('pywebview API not ready')
     return;
   }
-  const indexes = [0, 2, 4]
-  const result = await globalThis.pywebview.api.start_sort(indexes)
-  console.log(result.job_id)
+
+  const indexes = Array.from(
+    document.querySelectorAll('#albums-list input[type="checkbox"]:checked')
+  ).map((checkbox) => Number(checkbox.dataset.index));
+
+  const { job_id } = await globalThis.pywebview.api.start_sort(indexes);
+
+  const timer = setInterval(async () => {
+  const progress = await globalThis.pywebview.api.get_sort_progress(job_id);
+  console.log(progress);
+
+  if (progress.status === 'complete' || progress.status === 'error') {
+    clearInterval(timer);
+  }
+}, 500);
 }
