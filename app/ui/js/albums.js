@@ -48,3 +48,25 @@ function updateSelection() {
   const selected = Array.from(checkboxes).filter((cb) => cb.checked).length;
   document.getElementById('download-btn').disabled = selected === 0;
 }
+
+export async function startSort() {
+  if (!globalThis.pywebview?.api) {
+    console.log('pywebview API not ready')
+    return;
+  }
+
+  const indexes = Array.from(
+    document.querySelectorAll('#albums-list input[type="checkbox"]:checked')
+  ).map((checkbox) => Number(checkbox.dataset.index));
+
+  const { job_id } = await globalThis.pywebview.api.start_sort(indexes);
+
+  const timer = setInterval(async () => {
+  const progress = await globalThis.pywebview.api.get_sort_progress(job_id);
+  console.log(progress);
+
+  if (progress.status === 'complete' || progress.status === 'error') {
+    clearInterval(timer);
+  }
+}, 500);
+}
