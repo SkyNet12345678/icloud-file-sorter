@@ -214,3 +214,4 @@ node_modules/
 # AI-related
 .codex
 AGENTS.md
+docs/plans/progress-bar-mock-sort.md

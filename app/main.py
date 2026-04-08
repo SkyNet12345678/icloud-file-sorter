@@ -1,4 +1,5 @@
 import webview
+import uuid
 
 from app.api.auth_api import AuthApi
 from app.icloud.albums_service import AlbumsService
@@ -32,6 +33,23 @@ class API:
         if not self.albums_service:
             return []
         return self.albums_service.get_albums()
+    
+    def start_sort(self, selected_indexes):
+        job_id = str(uuid.uuid4())
+        album_data = self.get_albums()
+        print(album_data)
+        return {"job_id": job_id}
+    
+#     def get_sort_progress(job_id):
+#         payload = {
+#   "job_id": "string",
+#   "status": "idle | running | complete | error",
+#   "processed": 120,
+#   "total": 1847,
+#   "percent": 6,
+#   "message": "Processing photo 120 of 1847"
+# }
+#         return
 
 # --- Create pywebview window ---
 webview.create_window(

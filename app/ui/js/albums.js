@@ -40,6 +40,8 @@ export function showAlbums(albums) {
 
   document.querySelector('.login-card').style.display = 'none';
   document.getElementById('albums-view').style.display = 'block';
+  
+  
   updateSelection();
 }
 
@@ -47,4 +49,14 @@ function updateSelection() {
   const checkboxes = document.querySelectorAll('#albums-list input[type="checkbox"]');
   const selected = Array.from(checkboxes).filter((cb) => cb.checked).length;
   document.getElementById('download-btn').disabled = selected === 0;
+}
+
+export async function startSort() {
+  if (!globalThis.pywebview?.api) {
+    console.log('pywebview API not ready')
+    return;
+  }
+  const indexes = [0, 2, 4]
+  const result = await globalThis.pywebview.api.start_sort(indexes)
+  console.log(result.job_id)
 }
