@@ -1,7 +1,8 @@
 import { login, submit2FA, restartLogin } from './login.js';
-import { startSort } from './albums.js';
+import { loadAlbums, startSort } from './albums.js';
 
-document.addEventListener('DOMContentLoaded', () => {
+// to stop skipping login, use the commented-out code
+document.addEventListener('DOMContentLoaded', async () => {
   const loginBtn = document.getElementById('loginBtn');
   const verifyBtn = document.getElementById('verifyBtn');
   const restartBtn = document.getElementById('restartBtn');
@@ -10,5 +11,22 @@ document.addEventListener('DOMContentLoaded', () => {
   loginBtn.addEventListener('click', login);
   verifyBtn.addEventListener('click', submit2FA);
   restartBtn.addEventListener('click', restartLogin);
-  startButton.addEventListener('click', startSort)
+  startButton.addEventListener('click', startSort);
 });
+
+window.addEventListener('pywebviewready', async () => {
+  await loadAlbums();
+});
+
+
+// document.addEventListener('DOMContentLoaded', () => {
+//   const loginBtn = document.getElementById('loginBtn');
+//   const verifyBtn = document.getElementById('verifyBtn');
+//   const restartBtn = document.getElementById('restartBtn');
+//   const startButton = document.getElementById('download-btn');
+
+//   loginBtn.addEventListener('click', login);
+//   verifyBtn.addEventListener('click', submit2FA);
+//   restartBtn.addEventListener('click', restartLogin);
+//   startButton.addEventListener('click', startSort)
+// });
