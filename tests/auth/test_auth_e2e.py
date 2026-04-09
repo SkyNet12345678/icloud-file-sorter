@@ -46,7 +46,7 @@ def test_full_login_flow(auth_api):
     # Step 3: invalid 2FA code
     resp2 = auth_api.verify_2fa("000000")
     assert resp2["success"] is False
-    assert resp2["message"] == "Invalid code"
+    assert resp2["message"] == "Invalid 2FA code"
 
     # Step 4: valid 2FA code
     resp3 = auth_api.verify_2fa("123456")
