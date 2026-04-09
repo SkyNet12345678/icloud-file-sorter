@@ -204,13 +204,23 @@ body, html {
   background-color: #fff;
 }
 
-.sort-progress-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.sort-selection {
   font-size: 14px;
-  font-weight: 600;
-  color: #1f2937;
+  color: #4b5563;
+}
+
+.sort-progress-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sort-progress-content[hidden] {
+  display: none !important;
+}
+
+.sort-selection[hidden] {
+  display: none !important;
 }
 
 .sort-progress-track {
@@ -227,6 +237,19 @@ body, html {
   border-radius: inherit;
   background: linear-gradient(90deg, #007bff 0%, #34aadc 100%);
   transition: width 0.3s ease;
+}
+
+.sort-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.sort-progress-percent {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
 }
 
 .sort-progress-message {
