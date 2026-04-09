@@ -91,6 +91,7 @@ export async function startSort() {
 
   downloadButton.dataset.sorting = 'true';
   sortState = 'running';
+  setSortControls(true);
   setCheckboxesDisabled(true);
   setSortProgress({
     percent: 0,
@@ -118,6 +119,7 @@ export async function startSort() {
           clearInterval(sortTimer);
           sortTimer = null;
           downloadButton.dataset.sorting = 'false';
+          setSortControls(false);
           setCheckboxesDisabled(false);
           sortState = progress.status;
           clearSelections();
@@ -127,6 +129,7 @@ export async function startSort() {
         clearInterval(sortTimer);
         sortTimer = null;
         downloadButton.dataset.sorting = 'false';
+        setSortControls(false);
         setCheckboxesDisabled(false);
         sortState = 'error';
         clearSelections();
@@ -141,6 +144,7 @@ export async function startSort() {
     }, 100);
   } catch (error) {
     downloadButton.dataset.sorting = 'false';
+    setSortControls(false);
     setCheckboxesDisabled(false);
     sortState = 'idle';
     showSelectionSummary();
@@ -158,6 +162,7 @@ function setCheckboxesDisabled(disabled) {
 
 function resetSortProgress() {
   sortState = 'idle';
+  setSortControls(false);
   showSelectionSummary();
   updateSelectionSummary([]);
   setSortProgress({
@@ -206,4 +211,17 @@ function clearSelections() {
   checkboxes.forEach((checkbox) => {
     checkbox.checked = false;
   });
+}
+
+export function cancelSort() {
+  // TODO: Wire this to a real backend cancel endpoint once cancellation is supported.
+  console.log('Cancel sort requested, but backend cancellation is not implemented yet.');
+}
+
+function setSortControls(isSorting) {
+  const downloadButton = document.getElementById('download-btn');
+  const cancelButton = document.getElementById('cancel-btn');
+
+  downloadButton.hidden = isSorting;
+  cancelButton.hidden = !isSorting;
 }

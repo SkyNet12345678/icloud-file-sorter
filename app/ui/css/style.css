@@ -194,6 +194,25 @@ body, html {
   background-color: #0056b3;
 }
 
+.cancel-btn {
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.cancel-btn:hover {
+  background-color: #b91c1c;
+}
+
+.cancel-btn[hidden] {
+  display: none !important;
+}
+
 .sort-progress {
   display: flex;
   flex-direction: column;
