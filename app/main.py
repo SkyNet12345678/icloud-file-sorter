@@ -17,7 +17,9 @@ auth_api = AuthApi()
 
 class API:
     def __init__(self):
+        # to skip the login page in dev
         self.albums_service = None
+        # self.albums_service = AlbumsService(None) if DEV_BYPASS_LOGIN else None
 
     def login(self, apple_id, password):
         result = auth_api.login(apple_id, password)
