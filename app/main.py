@@ -7,7 +7,9 @@ from app.logger import setup_logger
 logger= setup_logger()
 logger.info("App starting")
 
-
+# skip login page in dev
+# run with "DEV_BYPASS_LOGIN=1 python -m main.py"
+DEV_BYPASS_LOGIN = os.getenv("DEV_BYPASS_LOGIN") == "1"
 
 # --- API Bridge ---
 auth_api = AuthApi()
