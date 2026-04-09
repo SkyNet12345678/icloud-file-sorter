@@ -23,3 +23,40 @@ class AlbumsService:
         except Exception as e:
             logger.exception("Failed to fetch albums: %s", str(e))
             return []
+
+    def start_sort(self, selected_indexes):
+        if not self.icloud:
+            logger.warning("start_sort called but icloud service is not initialized")
+            return {"error": "Sorting service unavailable"}
+
+        try:
+            logger.info("Starting sort for %d selected album indexes", len(selected_indexes))
+            return self.icloud.start_sort(selected_indexes)
+        except Exception as e:
+            logger.exception("Failed to start sort: %s", str(e))
+            return {"error": "Failed to start sort"}
+
+    def get_sort_progress(self, job_id):
+        if not self.icloud:
+            logger.warning("get_sort_progress called but icloud service is not initialized")
+            return {
+                "job_id": job_id,
+                "status": "error",
+                "processed": 0,
+                "total": 0,
+                "percent": 0,
+                "message": "Sorting service unavailable",
+            }
+
+        try:
+            return self.icloud.get_sort_progress(job_id)
+        except Exception as e:
+            logger.exception("Failed to get sort progress: %s", str(e))
+            return {
+                "job_id": job_id,
+                "status": "error",
+                "processed": 0,
+                "total": 0,
+                "percent": 0,
+                "message": "Failed to get sort progress",
+            }
