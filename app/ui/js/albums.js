@@ -1,4 +1,5 @@
 let sortTimer = null;
+let sortState = 'idle';
 
 export async function loadAlbums() {
   document.getElementById('status').innerText = 'Loading albums...';
@@ -25,6 +26,7 @@ export function showAlbums(albums) {
     checkbox.type = 'checkbox';
     checkbox.id = `album-${index}`;
     checkbox.dataset.index = index;
+    checkbox.dataset.albumName = album.name;
 
     checkbox.addEventListener('change', updateSelection);
 
@@ -49,9 +51,22 @@ export function showAlbums(albums) {
 
 function updateSelection() {
   const checkboxes = document.querySelectorAll('#albums-list input[type="checkbox"]');
-  const selected = Array.from(checkboxes).filter((cb) => cb.checked).length;
+  const selectedCheckboxes = Array.from(checkboxes).filter((cb) => cb.checked);
+  const selected = selectedCheckboxes.length;
   const downloadButton = document.getElementById('download-btn');
   const isSorting = downloadButton.dataset.sorting === 'true';
+
+  if (!isSorting) {
+    if (selected > 0) {
+      sortState = 'idle';
+      showSelectionSummary();
+      updateSelectionSummary(selectedCheckboxes.map((checkbox) => checkbox.dataset.albumName));
+    } else if (sortState === 'idle') {
+      showSelectionSummary();
+      updateSelectionSummary([]);
+    }
+  }
+
   downloadButton.disabled = selected === 0 || isSorting;
 }
 
@@ -75,6 +90,7 @@ export async function startSort() {
   }
 
   downloadButton.dataset.sorting = 'true';
+  sortState = 'running';
   setCheckboxesDisabled(true);
   setSortProgress({
     percent: 0,
@@ -103,6 +119,8 @@ export async function startSort() {
           sortTimer = null;
           downloadButton.dataset.sorting = 'false';
           setCheckboxesDisabled(false);
+          sortState = progress.status;
+          clearSelections();
           updateSelection();
         }
       } catch (error) {
@@ -110,24 +128,23 @@ export async function startSort() {
         sortTimer = null;
         downloadButton.dataset.sorting = 'false';
         setCheckboxesDisabled(false);
-        updateSelection();
+        sortState = 'error';
+        clearSelections();
         setSortProgress({
           percent: 0,
           message: 'Failed to fetch sort progress.',
           status: 'error',
         });
+        updateSelection();
         console.error(error);
       }
     }, 100);
   } catch (error) {
     downloadButton.dataset.sorting = 'false';
     setCheckboxesDisabled(false);
+    sortState = 'idle';
+    showSelectionSummary();
     updateSelection();
-    setSortProgress({
-      percent: 0,
-      message: error.message || 'Failed to start sort.',
-      status: 'error',
-    });
     console.error(error);
   }
 }
@@ -140,8 +157,9 @@ function setCheckboxesDisabled(disabled) {
 }
 
 function resetSortProgress() {
-  const progressContainer = document.getElementById('sort-progress');
-  progressContainer.hidden = true;
+  sortState = 'idle';
+  showSelectionSummary();
+  updateSelectionSummary([]);
   setSortProgress({
     percent: 0,
     message: '',
@@ -151,21 +169,41 @@ function resetSortProgress() {
 
 function setSortProgress(progress) {
   const percent = Math.max(0, Math.min(progress.percent ?? 0, 100));
-  const progressContainer = document.getElementById('sort-progress');
+  const selectionSummary = document.getElementById('sort-selection');
+  const progressContent = document.getElementById('sort-progress-content');
   const progressFill = document.getElementById('sort-progress-fill');
   const progressPercent = document.getElementById('sort-progress-percent');
-  const progressLabel = document.getElementById('sort-progress-label');
   const progressMessage = document.getElementById('sort-progress-message');
 
-  progressContainer.hidden = progress.status === 'idle';
+  selectionSummary.hidden = progress.status !== 'idle';
+  progressContent.hidden = progress.status === 'idle';
   progressFill.style.width = `${percent}%`;
   progressPercent.innerText = `${percent}%`;
-  if (progress.status === 'complete') {
-    progressLabel.innerText = 'Sorting finished';
-  } else if (progress.status === 'error') {
-    progressLabel.innerText = 'Sorting failed';
-  } else {
-    progressLabel.innerText = 'Sorting photos...';
-  }
   progressMessage.innerText = progress.message || '';
+}
+
+function updateSelectionSummary(selectedAlbums) {
+  const selectionSummary = document.getElementById('sort-selection');
+
+  if (selectedAlbums.length === 0) {
+    selectionSummary.innerText = 'No folders selected';
+    return;
+  }
+
+  selectionSummary.innerText = selectedAlbums.join(', ');
+}
+
+function showSelectionSummary() {
+  const selectionSummary = document.getElementById('sort-selection');
+  const progressContent = document.getElementById('sort-progress-content');
+
+  selectionSummary.hidden = false;
+  progressContent.hidden = true;
+}
+
+function clearSelections() {
+  const checkboxes = document.querySelectorAll('#albums-list input[type="checkbox"]');
+  checkboxes.forEach((checkbox) => {
+    checkbox.checked = false;
+  });
 }

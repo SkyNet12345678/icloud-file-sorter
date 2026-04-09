@@ -41,15 +41,17 @@
 
         <div class="albums-footer">
           <button id="download-btn" disabled>Sort photos to selected albums</button>
-          <div id="sort-progress" class="sort-progress" hidden>
-            <div class="sort-progress-header">
-              <span id="sort-progress-label">Sorting photos...</span>
-              <span id="sort-progress-percent">0%</span>
+          <div id="sort-progress" class="sort-progress">
+            <div id="sort-selection" class="sort-selection">No folders selected</div>
+            <div id="sort-progress-content" class="sort-progress-content" hidden>
+              <div class="sort-progress-track">
+                <div id="sort-progress-fill" class="sort-progress-fill"></div>
+              </div>
+              <div class="sort-progress-meta">
+                <span id="sort-progress-percent" class="sort-progress-percent">0%</span>
+                <span id="sort-progress-message" class="sort-progress-message"></span>
+              </div>
             </div>
-            <div class="sort-progress-track">
-              <div id="sort-progress-fill" class="sort-progress-fill"></div>
-            </div>
-            <div id="sort-progress-message" class="sort-progress-message"></div>
           </div>
         </div>
       </div>
