@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 Run the app with:
 
 ```bash
-DEV_BYPASS_LOGIN=1 python -m main.py # or python3 if needed
+DEV_BYPASS_LOGIN=1 python -m app.main # or python3 if needed
 ```
 
 To go back to login, swap the commented-out lines in **main.js** and run normally.
