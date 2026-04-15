@@ -1,8 +1,7 @@
 import { login, submit2FA, restartLogin } from './login.js';
-import { loadAlbums, startSort, cancelSort } from './albums.js';
+import { startSort, cancelSort } from './albums.js';
 
-document.addEventListener('DOMContentLoaded', async () => {
-// document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => {
   const loginBtn = document.getElementById('loginBtn');
   const verifyBtn = document.getElementById('verifyBtn');
   const restartBtn = document.getElementById('restartBtn');
@@ -14,8 +13,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   restartBtn.addEventListener('click', restartLogin);
   startButton.addEventListener('click', startSort);
   cancelButton.addEventListener('click', cancelSort);
-});
-
-window.addEventListener('pywebviewready', async () => {
-  await loadAlbums();
 });

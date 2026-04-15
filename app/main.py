@@ -1,5 +1,4 @@
 import webview
-import os
 
 from app.api.auth_api import AuthApi
 from app.icloud.albums_service import AlbumsService
@@ -8,18 +7,12 @@ from app.logger import setup_logger
 logger= setup_logger()
 logger.info("App starting")
 
-# skip login page in dev
-# run with "DEV_BYPASS_LOGIN=1 python -m main.py"
-DEV_BYPASS_LOGIN = os.getenv("DEV_BYPASS_LOGIN") == "1"
-
 # --- API Bridge ---
 auth_api = AuthApi()
 
 class API:
     def __init__(self):
-        # to skip the login page in dev
-        # self.albums_service = None
-        self.albums_service = AlbumsService(None) if DEV_BYPASS_LOGIN else None
+        self.albums_service = None
 
     def login(self, apple_id, password):
         result = auth_api.login(apple_id, password)
