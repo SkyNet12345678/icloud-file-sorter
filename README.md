@@ -23,12 +23,18 @@ The app is currenlty set to skip the login page for dev and use mock data.
 
 document.addEventListener('DOMContentLoaded', async () => {
 // document.addEventListener('DOMContentLoaded', () => {
+
+// the rest of the code...
+
+window.addEventListener('pywebviewready', async () => {
+  await loadAlbums();
+});
 ```
 
-Run the app with:
+Run the app from root with:
 
 ```bash
-DEV_BYPASS_LOGIN=1 python -m main.py # or python3 if needed
+DEV_BYPASS_LOGIN=1 python -m app.main # or python3 if needed
 ```
 
 To go back to login, swap the commented-out lines in **main.js** and run normally.
