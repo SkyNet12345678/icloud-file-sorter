@@ -36,11 +36,24 @@
         <h1 style="text-align: center;">iCloud photo Sorter</h1>
         <p>Organize your iCloud photos into folders.</p>
         <br>
-        <h3>Select albums to organize:</h1>
+        <h3>Select albums to organize:</h3>
         <ul id="albums-list" class="albums-list"></ul>
 
         <div class="albums-footer">
           <button id="download-btn" disabled>Sort photos to selected albums</button>
+          <button id="cancel-btn" class="cancel-btn" hidden>Cancel sort</button>
+          <div id="sort-progress" class="sort-progress">
+            <div id="sort-selection" class="sort-selection">No folders selected</div>
+            <div id="sort-progress-content" class="sort-progress-content" hidden>
+              <div class="sort-progress-track">
+                <div id="sort-progress-fill" class="sort-progress-fill"></div>
+              </div>
+              <div class="sort-progress-meta">
+                <span id="sort-progress-percent" class="sort-progress-percent">0%</span>
+                <span id="sort-progress-message" class="sort-progress-message"></span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

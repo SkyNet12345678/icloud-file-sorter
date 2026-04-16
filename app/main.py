@@ -7,8 +7,6 @@ from app.logger import setup_logger
 logger= setup_logger()
 logger.info("App starting")
 
-
-
 # --- API Bridge ---
 auth_api = AuthApi()
 
@@ -32,6 +30,23 @@ class API:
         if not self.albums_service:
             return []
         return self.albums_service.get_albums()
+    
+    def start_sort(self, selected_indexes):
+        if not self.albums_service:
+            return {"error": "Sorting service unavailable"}
+        return self.albums_service.start_sort(selected_indexes)
+
+    def get_sort_progress(self, job_id):
+        if not self.albums_service:
+            return {
+                "job_id": job_id,
+                "status": "error",
+                "processed": 0,
+                "total": 0,
+                "percent": 0,
+                "message": "Sorting service unavailable",
+            }
+        return self.albums_service.get_sort_progress(job_id)
 
 # --- Create pywebview window ---
 webview.create_window(
