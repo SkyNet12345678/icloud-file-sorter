@@ -1,9 +1,7 @@
 import { login, submit2FA, restartLogin } from './login.js';
 import { loadAlbums } from './albums.js';
 
-// to stop skipping login, use the commented-out code
-document.addEventListener('DOMContentLoaded', async () => {
-  // document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => {
   const loginBtn = document.getElementById('loginBtn');
   const verifyBtn = document.getElementById('verifyBtn');
   const restartBtn = document.getElementById('restartBtn');
@@ -14,5 +12,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 window.addEventListener('pywebviewready', async () => {
-  await loadAlbums();
+  try {
+    const shouldBypassLogin = await globalThis.pywebview.api.is_dev_bypass_enabled();
+    if (shouldBypassLogin) {
+      await loadAlbums();
+    }
+  } catch (err) {
+    console.error('Failed to determine startup mode.', err);
+  }
 });

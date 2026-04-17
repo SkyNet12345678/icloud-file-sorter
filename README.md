@@ -16,20 +16,7 @@ python -m app.main # or python3 if needed
 ```
 
 ### Running offline for dev
-The app is currenlty set to skip the login page for dev and use mock data.
-
-```JavaScript
-// main.js
-
-document.addEventListener('DOMContentLoaded', async () => {
-// document.addEventListener('DOMContentLoaded', () => {
-
-// the rest of the code...
-
-window.addEventListener('pywebviewready', async () => {
-  await loadAlbums();
-});
-```
+Set the `DEV_BYPASS_LOGIN` environment variable to skip the login page and use mock data.
 
 Run the app from root with:
 
@@ -37,7 +24,7 @@ Run the app from root with:
 DEV_BYPASS_LOGIN=1 python -m app.main # or python3 if needed
 ```
 
-To go back to login, swap the commented-out lines in **main.js** and run normally.
+To go back to login, run the app without that environment variable.
 
 ### Prerequisites
 
