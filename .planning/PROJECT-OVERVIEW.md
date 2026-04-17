@@ -137,6 +137,7 @@ Default discovery options:
 Cloud-to-local file matching can take a long time, so it should not happen during album browsing or album list loading.
 
 - `get_albums()` should stay lightweight and metadata-focused
+- the initial album fetch should retrieve only what the browser needs to render: album name and total item count
 - local filesystem scanning should begin only after the user starts sorting
 - matching should run inside the sort job lifecycle so progress reporting reflects the real work
 - matched file state can then be written into JSON as part of the active sort run
@@ -213,7 +214,7 @@ Existing bridge methods:
 - `login(apple_id, password)`
 - `verify_2fa(code)`
 - `get_albums()`
-- `start_sort(selected_indexes)`
+- `start_sort(selected_album_ids)`
 - `get_sort_progress(job_id)`
 
 Recommended evolution:
