@@ -12,28 +12,31 @@ class AlbumsService:
     def get_albums(self):
         if not self.icloud:
             logger.warning("get_albums called but icloud service is not initialized")
-            return []
+            return self._album_failure("Album service unavailable")
 
         try:
             logger.info("Fetching albums")
-            albums = self.icloud.get_albums()
-            logger.info("Fetched %d albums", len(albums))
-            return albums
+            result = self.icloud.get_albums()
+            if result.get("success"):
+                logger.info("Fetched %d albums", len(result["albums"]))
+            else:
+                logger.warning("Album fetch failed: %s", result.get("error"))
+            return result
 
-        except Exception as e:
-            logger.exception("Failed to fetch albums: %s", str(e))
-            return []
+        except Exception as exc:
+            logger.exception("Failed to fetch albums: %s", exc)
+            return self._album_failure(str(exc) or "Failed to fetch albums")
 
-    def start_sort(self, selected_indexes):
+    def start_sort(self, selected_album_ids):
         if not self.icloud:
             logger.warning("start_sort called but icloud service is not initialized")
             return {"error": "Sorting service unavailable"}
 
         try:
-            logger.info("Starting sort for %d selected album indexes", len(selected_indexes))
-            return self.icloud.start_sort(selected_indexes)
-        except Exception as e:
-            logger.exception("Failed to start sort: %s", str(e))
+            logger.info("Starting sort for %d selected album ids", len(selected_album_ids))
+            return self.icloud.start_sort(selected_album_ids)
+        except Exception as exc:
+            logger.exception("Failed to start sort: %s", exc)
             return {"error": "Failed to start sort"}
 
     def get_sort_progress(self, job_id):
@@ -50,8 +53,8 @@ class AlbumsService:
 
         try:
             return self.icloud.get_sort_progress(job_id)
-        except Exception as e:
-            logger.exception("Failed to get sort progress: %s", str(e))
+        except Exception as exc:
+            logger.exception("Failed to get sort progress: %s", exc)
             return {
                 "job_id": job_id,
                 "status": "error",
@@ -60,3 +63,10 @@ class AlbumsService:
                 "percent": 0,
                 "message": "Failed to get sort progress",
             }
+
+    def _album_failure(self, error_message):
+        return {
+            "success": False,
+            "albums": [],
+            "error": error_message,
+        }

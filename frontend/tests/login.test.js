@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const renderLoginDom = () => {
   document.body.innerHTML = `
+    <div class="login-card" style="display: block;"></div>
     <div id="login-form" style="display: block;">
       <input id="appleId" type="text" />
       <input id="password" type="password" />
@@ -12,6 +13,17 @@ const renderLoginDom = () => {
       <button id="verifyBtn">Verify</button>
     </div>
     <p id="status"></p>
+    <div id="albums-view" style="display: none;">
+      <p id="albums-status" hidden></p>
+      <ul id="albums-list"></ul>
+      <button id="download-btn" data-sorting="false"></button>
+      <button id="cancel-btn" hidden></button>
+      <div id="sort-selection">No albums selected</div>
+      <div id="sort-progress-content" hidden></div>
+      <div id="sort-progress-fill"></div>
+      <div id="sort-progress-percent"></div>
+      <div id="sort-progress-message"></div>
+    </div>
   `;
 };
 
@@ -21,12 +33,18 @@ describe("login.js", () => {
     renderLoginDom();
   });
 
-  it("shows a success message and hides the login form after a successful login", async () => {
+  it("loads albums after a successful login", async () => {
     const login = vi.fn().mockResolvedValue({ success: true });
+    const getAlbums = vi.fn().mockResolvedValue({
+      success: true,
+      albums: [{ id: "album-1", name: "Trips", item_count: 3, is_system_album: false }],
+      error: null,
+    });
 
     globalThis.pywebview = {
       api: {
         login,
+        get_albums: getAlbums,
         verify_2fa: vi.fn(),
       },
     };
@@ -34,36 +52,36 @@ describe("login.js", () => {
     document.getElementById("appleId").value = "user@example.com";
     document.getElementById("password").value = "super-secret";
 
-    await import("../../app/ui/js/login.js");
-    document.dispatchEvent(new Event("DOMContentLoaded"));
+    const loginModule = await import("../../app/ui/js/login.js");
+    await loginModule.login();
 
-    document.getElementById("loginBtn").click();
-    await vi.waitFor(() => expect(login).toHaveBeenCalledWith("user@example.com", "super-secret"));
-
-    expect(document.getElementById("status").innerText).toBe("Logged in!");
-    expect(document.getElementById("login-form").style.display).toBe("none");
+    expect(login).toHaveBeenCalledWith("user@example.com", "super-secret");
+    expect(getAlbums).toHaveBeenCalledTimes(1);
+    expect(document.getElementById("albums-view").style.display).toBe("block");
+    expect(document.querySelectorAll("#albums-list li")).toHaveLength(1);
   });
+
   it("shows invalid credentials message after entering incorrect credentials", async () => {
-    const login = vi.fn().mockResolvedValue({ 
+    const login = vi.fn().mockResolvedValue({
       success: false,
       message: "Invalid credentials",
-     });
+    });
 
     globalThis.pywebview = {
       api: {
         login,
+        get_albums: vi.fn(),
       },
     };
 
     document.getElementById("appleId").value = "user@example.com";
     document.getElementById("password").value = "super-secret";
 
-    await import("../../app/ui/js/login.js");
-    document.dispatchEvent(new Event("DOMContentLoaded"));
+    const loginModule = await import("../../app/ui/js/login.js");
+    await loginModule.login();
 
-    document.getElementById("loginBtn").click();
-    await vi.waitFor(() => expect(login).toHaveBeenCalledWith("user@example.com", "super-secret"));
-
+    expect(login).toHaveBeenCalledWith("user@example.com", "super-secret");
+    expect(document.getElementById("status").innerText).toBe("Invalid credentials");
     expect(document.getElementById("login-form").style.display).toBe("block");
   });
 });
