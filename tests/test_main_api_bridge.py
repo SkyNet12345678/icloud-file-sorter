@@ -24,7 +24,7 @@ def main_module(monkeypatch):
 def test_api_start_sort_returns_error_when_service_is_unavailable(main_module):
     api = main_module.API()
 
-    result = api.start_sort([1, 2])
+    result = api.start_sort(["album-1", "album-2"])
 
     assert result == {"error": "Sorting service unavailable"}
 
@@ -34,10 +34,38 @@ def test_api_start_sort_delegates_to_albums_service(main_module):
     api.albums_service = MagicMock()
     api.albums_service.start_sort.return_value = {"job_id": "job-123"}
 
-    result = api.start_sort([1, 2])
+    result = api.start_sort(["album-1", "album-2"])
 
     assert result == {"job_id": "job-123"}
-    api.albums_service.start_sort.assert_called_once_with([1, 2])
+    api.albums_service.start_sort.assert_called_once_with(["album-1", "album-2"])
+
+
+def test_api_get_albums_returns_failure_when_service_is_unavailable(main_module):
+    api = main_module.API()
+
+    result = api.get_albums()
+
+    assert result == {
+        "success": False,
+        "albums": [],
+        "error": "Album service unavailable",
+    }
+
+
+def test_api_get_albums_delegates_structured_payload(main_module):
+    api = main_module.API()
+    api.albums_service = MagicMock()
+    api.albums_service.get_albums.return_value = {
+        "success": True,
+        "albums": [{"id": "album-1", "name": "Trips", "item_count": 5, "is_system_album": False}],
+        "error": None,
+    }
+
+    result = api.get_albums()
+
+    assert result["success"] is True
+    assert result["albums"][0]["id"] == "album-1"
+    api.albums_service.get_albums.assert_called_once_with()
 
 
 def test_api_get_sort_progress_returns_error_when_service_is_unavailable(main_module):

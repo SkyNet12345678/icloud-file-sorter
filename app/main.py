@@ -28,13 +28,17 @@ class API:
 
     def get_albums(self):
         if not self.albums_service:
-            return []
+            return {
+                "success": False,
+                "albums": [],
+                "error": "Album service unavailable",
+            }
         return self.albums_service.get_albums()
     
-    def start_sort(self, selected_indexes):
+    def start_sort(self, selected_album_ids):
         if not self.albums_service:
             return {"error": "Sorting service unavailable"}
-        return self.albums_service.start_sort(selected_indexes)
+        return self.albums_service.start_sort(selected_album_ids)
 
     def get_sort_progress(self, job_id):
         if not self.albums_service:

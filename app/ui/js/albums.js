@@ -2,15 +2,19 @@ let sortTimer = null;
 let sortState = 'idle';
 
 export async function loadAlbums() {
-  document.getElementById('status').innerText = 'Loading albums...';
+  document.getElementById('status').textContent = 'Loading albums...';
 
   try {
-    const albums = await globalThis.pywebview.api.get_albums();
-    console.log('Albums:', albums);
-    showAlbums(albums);
+    const result = await globalThis.pywebview.api.get_albums();
+    const normalizedResult = normalizeAlbumResult(result);
+
+    console.log('Albums:', normalizedResult);
+    showAlbums(normalizedResult.albums);
+    updateAlbumsStatus(getAlbumStatusMessage(normalizedResult), !normalizedResult.success);
   } catch (err) {
     console.error(err);
-    document.getElementById('status').innerText = 'Failed to load albums.';
+    showAlbums([]);
+    updateAlbumsStatus('Failed to load albums.', true);
   }
 }
 
@@ -25,19 +29,26 @@ export function showAlbums(albums) {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.id = `album-${index}`;
-    checkbox.dataset.index = index;
+    checkbox.dataset.albumId = album.id;
     checkbox.dataset.albumName = album.name;
 
     checkbox.addEventListener('change', updateSelection);
 
     const label = document.createElement('label');
     label.htmlFor = checkbox.id;
-    label.innerHTML = `
-      <strong>${album.name}</strong><br>
-      <span>${album.photos} photos ${album.videos ? `• ${album.videos} videos` : ''}</span>
-    `;
+
+    const title = document.createElement('strong');
+    title.textContent = album.name;
+
+    const lineBreak = document.createElement('br');
+
+    const meta = document.createElement('span');
+    meta.textContent = formatAlbumItemCount(album.item_count);
 
     li.appendChild(checkbox);
+    label.appendChild(title);
+    label.appendChild(lineBreak);
+    label.appendChild(meta);
     li.appendChild(label);
     list.appendChild(li);
   });
@@ -81,11 +92,11 @@ export async function startSort() {
     return;
   }
 
-  const indexes = Array.from(
+  const albumIds = Array.from(
     document.querySelectorAll('#albums-list input[type="checkbox"]:checked')
-  ).map((checkbox) => Number(checkbox.dataset.index));
+  ).map((checkbox) => checkbox.dataset.albumId);
 
-  if (indexes.length === 0) {
+  if (albumIds.length === 0) {
     return;
   }
 
@@ -100,7 +111,7 @@ export async function startSort() {
   });
 
   try {
-    const result = await globalThis.pywebview.api.start_sort(indexes);
+    const result = await globalThis.pywebview.api.start_sort(albumIds);
 
     if (!result?.job_id) {
       throw new Error(result?.error || 'Failed to start sort');
@@ -183,19 +194,19 @@ function setSortProgress(progress) {
   selectionSummary.hidden = progress.status !== 'idle';
   progressContent.hidden = progress.status === 'idle';
   progressFill.style.width = `${percent}%`;
-  progressPercent.innerText = `${percent}%`;
-  progressMessage.innerText = progress.message || '';
+  progressPercent.textContent = `${percent}%`;
+  progressMessage.textContent = progress.message || '';
 }
 
 function updateSelectionSummary(selectedAlbums) {
   const selectionSummary = document.getElementById('sort-selection');
 
   if (selectedAlbums.length === 0) {
-    selectionSummary.innerText = 'No folders selected';
+    selectionSummary.textContent = 'No albums selected';
     return;
   }
 
-  selectionSummary.innerText = selectedAlbums.join(', ');
+  selectionSummary.textContent = selectedAlbums.join(', ');
 }
 
 function showSelectionSummary() {
@@ -224,4 +235,45 @@ function setSortControls(isSorting) {
 
   downloadButton.hidden = isSorting;
   cancelButton.hidden = !isSorting;
+}
+
+function normalizeAlbumResult(result) {
+  if (Array.isArray(result)) {
+    return {
+      success: true,
+      albums: result,
+      error: null,
+    };
+  }
+
+  return {
+    success: result?.success === true,
+    albums: Array.isArray(result?.albums) ? result.albums : [],
+    error: result?.error || null,
+  };
+}
+
+function getAlbumStatusMessage(result) {
+  if (!result.success) {
+    return result.error || 'Failed to load albums.';
+  }
+
+  if (result.albums.length === 0) {
+    return 'No eligible albums found in iCloud Photos.';
+  }
+
+  return '';
+}
+
+function updateAlbumsStatus(message, isError = false) {
+  const albumsStatus = document.getElementById('albums-status');
+  albumsStatus.hidden = message.length === 0;
+  albumsStatus.textContent = message;
+  albumsStatus.dataset.state = isError ? 'error' : 'info';
+}
+
+function formatAlbumItemCount(itemCount) {
+  const normalizedCount = Number.isFinite(itemCount) ? itemCount : 0;
+  const suffix = normalizedCount === 1 ? 'item' : 'items';
+  return `${normalizedCount} ${suffix}`;
 }
