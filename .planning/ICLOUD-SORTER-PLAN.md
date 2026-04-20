@@ -88,6 +88,7 @@ Status: planned
 
 Scope:
 
+- remove the temporary "Test Asset Fetch" button added in Epic 3 Phase 5
 - scan the local iCloud Photos folder when the user starts sorting
 - build a fast filename index for the local folder
 - match by filename first, then use size and created-at style fallbacks when needed
