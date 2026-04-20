@@ -142,6 +142,56 @@ def test_albums_service_get_sort_progress_returns_error_without_icloud():
     }
 
 
+def test_albums_service_get_album_assets_delegates_correctly():
+    service = AlbumsService(icloud_api=None)
+    mock_icloud = ICloudService(api=None)
+    seed_album_cache(
+        mock_icloud,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 2,
+                "is_system_album": False,
+            },
+        ],
+    )
+    mock_icloud.asset_metadata_by_album_id["album-1"] = [
+        {
+            "asset_id": "a1",
+            "filename": "IMG_001.HEIC",
+            "original_filename": "IMG_001.HEIC",
+            "created_at": None,
+            "size": 1000,
+            "media_type": "image",
+            "album_id": "album-1",
+            "album_name": "Vacation 2025",
+        },
+    ]
+    mock_icloud.asset_cache_loaded_album_ids.add("album-1")
+    service.icloud = mock_icloud
+
+    result = service.get_album_assets("album-1")
+
+    assert result["success"] is True
+    assert result["album"]["id"] == "album-1"
+    assert len(result["assets"]) == 1
+
+
+def test_albums_service_get_album_assets_returns_error_without_icloud():
+    service = AlbumsService(icloud_api=None)
+    service.icloud = None
+
+    result = service.get_album_assets("album-1")
+
+    assert result == {
+        "success": False,
+        "album": None,
+        "assets": [],
+        "error": "Album service unavailable",
+    }
+
+
 def test_start_sort_returns_error_when_no_albums_selected():
     service = ICloudService(api=None)
     seed_album_cache(
