@@ -208,7 +208,7 @@ Deliverables:
 
 - identify the `pyicloud` album objects and fields available after login
 - document which album types should be shown in the MVP
-- exclude smart/system albums if that is reliably detectable
+- include smart/system albums for now, while preserving `is_system_album` so later filtering can be added deliberately
 - define normalization rules for album summaries using only album name and total item count
 - switch sort selection from selected indexes to selected album IDs
 - remove dependencies on mocked album names or synthetic album rows from the sort boundary
