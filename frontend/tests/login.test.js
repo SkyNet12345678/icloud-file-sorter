@@ -84,4 +84,29 @@ describe("login.js", () => {
     expect(document.getElementById("status").innerText).toBe("Invalid credentials");
     expect(document.getElementById("login-form").style.display).toBe("block");
   });
+
+  it("loads albums after successful 2FA verification", async () => {
+    const verify2fa = vi.fn().mockResolvedValue({ success: true });
+    const getAlbums = vi.fn().mockResolvedValue({
+      success: true,
+      albums: [{ id: "album-1", name: "Trips", item_count: 3, is_system_album: false }],
+      error: null,
+    });
+
+    globalThis.pywebview = {
+      api: {
+        verify_2fa: verify2fa,
+        get_albums: getAlbums,
+      },
+    };
+
+    document.getElementById("2faCode").value = "123456";
+
+    const loginModule = await import("../../app/ui/js/login.js");
+    await loginModule.submit2FA();
+
+    expect(verify2fa).toHaveBeenCalledWith("123456");
+    expect(getAlbums).toHaveBeenCalledTimes(1);
+    expect(document.querySelectorAll("#albums-list li")).toHaveLength(1);
+  });
 });

@@ -11,13 +11,13 @@ Primary source files:
 Current implementation baseline:
 
 - `app/main.py` exposes the `pywebview` bridge
-- `app/icloud/icloud_service.py` still returns mocked album data
+- `app/icloud/icloud_service.py` returns real album summaries and still uses a temporary mocked sort-progress flow
 - `app/icloud/albums_service.py` wraps album and sorting calls
 - `app/ui/js/albums.js` expects `get_albums()` to return lightweight album summary data and should remain fast
 
 ## Goal
 
-Replace the mocked album browser flow with real iCloud album metadata retrieval while preserving the existing desktop shell and current bridge-first architecture.
+Complete and harden the real iCloud album metadata flow while preserving the existing desktop shell and current bridge-first architecture.
 
 At the end of this epic, the app should:
 
@@ -25,6 +25,7 @@ At the end of this epic, the app should:
 - display them in the existing album selection UI
 - keep album browsing metadata-only and lightweight
 - hold album and asset metadata in memory for the active session
+- preserve ordered album memberships for assets that belong to multiple selected albums so later sort behavior can remain deterministic
 - defer any local filesystem scanning and cloud-to-local matching until sorting begins
 - distinguish between known album-fetch failures and a genuine "no albums" result
 
@@ -40,13 +41,12 @@ This epic should not:
 
 ## Current Gaps
 
-Today, the repo has the auth shell and album UI flow, but the album layer is still mocked:
+Today, the repo already has the auth shell, real album loading, and album UI flow, but some Epic 3 hardening work still remains:
 
-- `ICloudService.get_albums()` returns hardcoded album summaries
-- temporary sort progress still depends on mocked album data
-- there is no in-memory cache for real album metadata
-- there is no boundary yet between lightweight album summaries and richer per-asset metadata
-- tests currently cover mocked sorting behavior more than real album retrieval behavior
+- temporary sort progress still uses a mocked progress flow even though album summaries are real
+- the lightweight album-summary contract still needs to stay explicit and regression-resistant
+- there is still follow-up work to keep lightweight album summaries distinct from richer per-asset metadata loading
+- tests still need to stay aligned with the real album retrieval path and the remaining temporary sort mock boundary
 
 ## Epic 3 Scope
 
@@ -133,6 +133,17 @@ Notes:
 - prefer normalizing values in one place before the rest of the app uses them
 - keep this cache session-only for Epic 3
 
+### Aggregated Multi-Album Asset Metadata
+
+When backend code resolves multiple selected albums at once, the result should preserve shared asset identity and ordered album membership.
+
+Notes:
+
+- the aggregation helper should return one record per unique asset
+- each aggregated asset record should preserve all selected album memberships for that asset
+- album memberships should preserve selected album order so later sort behavior can deterministically choose the first selected folder by default
+- this epic should preserve the metadata needed for later sort settings, not implement the sort policy itself
+
 ## Service Design
 
 Add a clear separation between summary retrieval and deeper asset metadata retrieval.
@@ -154,7 +165,7 @@ Recommended internal structure:
 - `get_album_assets(album_id)`:
   returns normalized asset metadata for a single album during sort-time preparation, not during initial album browsing
 - `get_assets_for_album_ids(selected_album_ids)`:
-  bridge-friendly helper for later sort initiation, converting UI selections into album metadata
+  bridge-friendly helper for later sort initiation, converting UI selections into ordered album-aware asset metadata
 - private normalization helpers:
   isolate `pyicloud` object quirks and missing fields
 
@@ -186,7 +197,7 @@ The current UI in `app/ui/js/albums.js` already supports:
 Epic 3 UI work should stay incremental:
 
 1. keep the current album list screen and DOM wiring
-2. make it render real album metadata instead of mocked data
+2. preserve the existing real album rendering and harden it against contract drift
 3. improve empty and error states so the UI can distinguish:
    - successful album load with albums
    - successful album load with no eligible albums
@@ -208,7 +219,7 @@ Deliverables:
 
 - identify the `pyicloud` album objects and fields available after login
 - document which album types should be shown in the MVP
-- exclude smart/system albums if that is reliably detectable
+- include smart/system albums for now, while preserving `is_system_album` so later filtering can be added deliberately
 - define normalization rules for album summaries using only album name and total item count
 - switch sort selection from selected indexes to selected album IDs
 - remove dependencies on mocked album names or synthetic album rows from the sort boundary
@@ -244,12 +255,14 @@ Deliverables:
 - normalized asset metadata loader per album
 - session-memory cache for assets keyed by album ID
 - data fields chosen to support later filename-based matching
+- aggregated multi-album metadata that preserves ordered album memberships for shared assets
 
 Acceptance criteria:
 
 - asset retrieval is available to backend services without changing the album browser into a file-matching step
 - metadata includes at least filename and any reliable size/date/media-type fields exposed by `pyicloud`
 - missing optional fields are normalized consistently
+- multi-album aggregation preserves all selected album memberships for shared assets and keeps selected order deterministic for later sort behavior
 
 ## Phase 4: Integrate Real Data Into Album Browser
 
@@ -290,13 +303,14 @@ Likely files to touch:
 - [app/ui/js/albums.js](/home/mac/code/python/icloud-file-sorter/app/ui/js/albums.js)
 - [tests/test_main_api_bridge.py](/home/mac/code/python/icloud-file-sorter/tests/test_main_api_bridge.py)
 - [tests/test_sorting_services.py](/home/mac/code/python/icloud-file-sorter/tests/test_sorting_services.py)
-- [frontend/tests/login.test.js](/home/mac/code/python/icloud-file-sorter/frontend/tests/login.test.js) or a new frontend album test file if Epic 3 expands the album UI contract enough to justify separate coverage
+- [frontend/tests/login.test.js](/home/mac/code/python/icloud-file-sorter/frontend/tests/login.test.js)
+- [frontend/tests/albums.test.js](/home/mac/code/python/icloud-file-sorter/frontend/tests/albums.test.js)
 
 Possible new test files:
 
 - `tests/icloud/test_album_metadata_service.py`
 - `tests/icloud/test_album_normalization.py`
-- `frontend/tests/albums.test.js`
+- add new frontend test files only if an Epic 3 case is still missing after updating the existing login and albums tests
 
 ## Test Coverage Expectations
 
@@ -327,7 +341,9 @@ Add tests for:
 
 Frontend coverage should stay lightweight and real:
 
-- update or add tests only if the DOM contract changes
+- keep the existing login and albums frontend tests in place as the baseline
+- update those files first when the DOM or bridge contract changes
+- add new frontend tests only for cases that are still uncovered after updating the existing files
 - keep tests aligned with the actual vanilla JS module wiring
 - verify album rendering and empty/error states if UI behavior changes
 
@@ -393,7 +409,7 @@ Mitigation:
 
 ## Suggested Task Breakdown
 
-1. replace mocked `get_albums()` output with normalized real album summaries
+1. verify and harden normalized real album summaries returned by `get_albums()`
 2. add in-memory album cache keyed by album ID
 3. add normalized per-album asset metadata loader
 4. make `start_sort()` resolve selected album IDs against real album data

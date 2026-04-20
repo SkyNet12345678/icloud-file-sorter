@@ -13,6 +13,11 @@ iCloud for Windows syncs photos into a flat local folder without preserving iClo
 
 The app should not re-download photos. It should work with the local files already synced by iCloud for Windows.
 
+For assets that belong to multiple selected albums, MVP behavior should be:
+
+- default: move the asset into the first selected album folder
+- optional setting: copy the asset into each selected album folder
+
 ## 2. Current Baseline
 
 The repository already contains a functional desktop shell and partial auth flow:
@@ -85,7 +90,7 @@ The last two modules do not exist yet but should be added as the implementation 
 8. User starts sorting for the selected albums.
 9. App scans the local iCloud Photos folder as part of that sort job.
 10. App matches local files against selected iCloud album assets during that job.
-11. App creates album folders and organizes matched files.
+11. App creates album folders and organizes matched files according to the selected multi-album behavior.
 12. App shows progress and a completion summary, including failures or unmatched files.
 
 ### Startup Prerequisite Checks
@@ -132,6 +137,16 @@ Default discovery options:
 - local file not referenced by selected albums: leave untouched
 - duplicate or ambiguous match: mark as failed with a clear reason
 
+### Multi-Album Sorting Behavior
+
+Some assets belong to multiple albums, such as `Favorites` plus a user-created album.
+
+For MVP:
+
+- default behavior should be `move_first_selected_album`, meaning the matched local file is moved into the first selected album folder for that asset
+- an optional setting should allow `copy_to_each_album`, meaning the matched local file is copied into each selected album folder for that asset
+- the metadata pipeline should preserve selected album order so the default behavior is deterministic
+
 ### When Matching Happens
 
 Cloud-to-local file matching can take a long time, so it should not happen during album browsing or album list loading.
@@ -164,7 +179,8 @@ Suggested fields:
   "schema_version": 1,
   "icloud_photos_path": null,
   "last_used_apple_id": null,
-  "sort_mode": "move"
+  "sort_mode": "move",
+  "multi_album_mode": "move_first_selected_album"
 }
 ```
 
@@ -173,6 +189,7 @@ Notes:
 - do not store passwords
 - be cautious with session identifiers and trust tokens
 - `sort_mode` may later support `copy` if needed, but MVP can remain `move`
+- `multi_album_mode` should default to `move_first_selected_album` and later allow `copy_to_each_album`
 
 ### State JSON
 

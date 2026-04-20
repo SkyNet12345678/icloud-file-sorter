@@ -35,6 +35,24 @@ class API:
             }
         return self.albums_service.get_albums()
     
+    def get_album_assets(self, album_id):
+        if not self.albums_service:
+            return {
+                "success": False,
+                "album": None,
+                "assets": [],
+                "error": "Album service unavailable",
+            }
+        result = self.albums_service.get_album_assets(album_id)
+        if result.get("success"):
+            album = result.get("album") or {}
+            logger.info(
+                "Bridge: get_album_assets returned %d assets for '%s'",
+                len(result.get("assets", [])),
+                album.get("name", album_id),
+            )
+        return result
+
     def start_sort(self, selected_album_ids):
         if not self.albums_service:
             return {"error": "Sorting service unavailable"}

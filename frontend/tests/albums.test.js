@@ -68,7 +68,7 @@ describe("albums.js", () => {
     await albums.loadAlbums();
 
     expect(document.getElementById("albums-status").textContent).toBe(
-      "No eligible albums found in iCloud Photos.",
+      "No albums found in iCloud Photos.",
     );
     expect(document.getElementById("albums-status").hidden).toBe(false);
     expect(document.querySelectorAll("#albums-list li")).toHaveLength(0);
@@ -99,6 +99,47 @@ describe("albums.js", () => {
     albums.showAlbums([{ id: "album-1", name: "Trips", is_system_album: false }]);
 
     expect(document.getElementById("albums-list").textContent).toContain("0 items");
+  });
+
+  it("renders a safe default when item_count is null", async () => {
+    const albums = await import("../../app/ui/js/albums.js");
+
+    albums.showAlbums([{ id: "album-1", name: "Trips", item_count: null, is_system_album: false }]);
+
+    expect(document.getElementById("albums-list").textContent).toContain("0 items");
+  });
+
+  it("shows error state on exception from bridge", async () => {
+    globalThis.pywebview = {
+      api: {
+        get_albums: vi.fn().mockRejectedValue(new Error("Network failure")),
+      },
+    };
+
+    const albums = await import("../../app/ui/js/albums.js");
+    await albums.loadAlbums();
+
+    expect(document.getElementById("albums-status").textContent).toBe("Failed to load albums.");
+    expect(document.getElementById("albums-status").hidden).toBe(false);
+    expect(document.querySelectorAll("#albums-list li")).toHaveLength(0);
+  });
+
+  it("normalizes a legacy array response", async () => {
+    globalThis.pywebview = {
+      api: {
+        get_albums: vi.fn().mockResolvedValue([
+          { id: "a1", name: "Beach", item_count: 5, is_system_album: false },
+        ]),
+      },
+    };
+
+    const albums = await import("../../app/ui/js/albums.js");
+    await albums.loadAlbums();
+
+    const checkboxes = Array.from(document.querySelectorAll("#albums-list input"));
+    expect(checkboxes).toHaveLength(1);
+    expect(checkboxes[0].dataset.albumId).toBe("a1");
+    expect(document.getElementById("albums-list").textContent).toContain("Beach");
   });
 
   it("submits selected album ids when sorting starts", async () => {

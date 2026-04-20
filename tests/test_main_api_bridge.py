@@ -100,3 +100,66 @@ def test_api_get_sort_progress_delegates_to_albums_service(main_module):
     assert result["status"] == "running"
     assert result["processed"] == 50
     api.albums_service.get_sort_progress.assert_called_once_with("job-123")
+
+
+def test_api_get_albums_empty_success_passthrough(main_module):
+    api = main_module.API()
+    api.albums_service = MagicMock()
+    api.albums_service.get_albums.return_value = {
+        "success": True,
+        "albums": [],
+        "error": None,
+    }
+
+    result = api.get_albums()
+
+    assert result == {
+        "success": True,
+        "albums": [],
+        "error": None,
+    }
+
+
+def test_api_get_album_assets_returns_failure_when_service_is_unavailable(main_module):
+    api = main_module.API()
+
+    result = api.get_album_assets("album-1")
+
+    assert result == {
+        "success": False,
+        "album": None,
+        "assets": [],
+        "error": "Album service unavailable",
+    }
+
+
+def test_api_get_album_assets_delegates_to_albums_service(main_module):
+    api = main_module.API()
+    api.albums_service = MagicMock()
+    api.albums_service.get_album_assets.return_value = {
+        "success": True,
+        "album": {"id": "album-1", "name": "Vacation 2025", "item_count": 3, "is_system_album": False},
+        "assets": [
+            {"asset_id": "a1", "filename": "IMG_001.HEIC"},
+            {"asset_id": "a2", "filename": "IMG_002.HEIC"},
+            {"asset_id": "a3", "filename": "IMG_003.HEIC"},
+        ],
+        "error": None,
+    }
+
+    result = api.get_album_assets("album-1")
+
+    assert result["success"] is True
+    assert len(result["assets"]) == 3
+    assert result["album"]["name"] == "Vacation 2025"
+    api.albums_service.get_album_assets.assert_called_once_with("album-1")
+
+
+def test_api_start_sort_error_passthrough_from_service(main_module):
+    api = main_module.API()
+    api.albums_service = MagicMock()
+    api.albums_service.start_sort.return_value = {"error": "Album cache not loaded"}
+
+    result = api.start_sort(["album-1"])
+
+    assert result == {"error": "Album cache not loaded"}

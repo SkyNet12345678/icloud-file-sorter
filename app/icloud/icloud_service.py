@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import datetime, timezone
 
 logger = logging.getLogger("icloud-sorter")
 
@@ -14,36 +15,30 @@ class ICloudService:
     def __init__(self, api):
         self.api = api
         self.jobs = {}
+        self.album_cache_loaded = False
+        self.album_list_cache = []
         self.album_summaries_by_id = {}
+        self.raw_albums_by_id = {}
+        self.asset_metadata_by_album_id = {}
+        self.asset_cache_loaded_album_ids = set()
 
-    def get_albums(self):
+    def get_albums(self, force_refresh=False):
         if not self.api:
             return self._failure_result("iCloud session unavailable")
 
         try:
-            raw_albums = self._get_raw_albums()
-            normalized_albums = []
-            summaries_by_id = {}
-
-            for raw_album in raw_albums:
-                summary = self._normalize_album_summary(raw_album)
-                if summary is None:
-                    continue
-                normalized_albums.append(summary)
-                summaries_by_id[summary["id"]] = summary
-
-            normalized_albums.sort(key=lambda album: album["name"].casefold())
-            self.album_summaries_by_id = summaries_by_id
-            return {
-                "success": True,
-                "albums": normalized_albums,
-                "error": None,
-            }
+            self._load_album_cache(force_refresh=force_refresh)
+            return self._success_result(self.album_list_cache)
         except Exception as exc:
             logger.exception("Failed to retrieve albums from iCloud: %s", exc)
             return self._failure_result(str(exc) or "Failed to fetch albums")
 
     def start_sort(self, selected_album_ids):
+        try:
+            self._require_album_cache_loaded()
+        except RuntimeError as exc:
+            return {"error": str(exc)}
+
         selected_ids = self._filter_known_album_ids(
             self._dedupe_selected_album_ids(selected_album_ids)
         )
@@ -91,6 +86,256 @@ class ICloudService:
 
         return job
 
+    def get_cached_album(self, album_id):
+        self._require_album_cache_loaded()
+        normalized_album_id = self._normalize_lookup_album_id(album_id)
+        if normalized_album_id is None:
+            return None
+        return self.raw_albums_by_id.get(normalized_album_id)
+
+    def get_cached_album_summary(self, album_id):
+        self._require_album_cache_loaded()
+        normalized_album_id = self._normalize_lookup_album_id(album_id)
+        if normalized_album_id is None:
+            return None
+        summary = self.album_summaries_by_id.get(normalized_album_id)
+        if summary is None:
+            return None
+        return dict(summary)
+
+    def get_album_assets(self, album_id, force_refresh=False):
+        try:
+            self._require_album_cache_loaded()
+            normalized_album_id = self._require_known_album_id(album_id)
+            album_summary = dict(self.album_summaries_by_id[normalized_album_id])
+            assets = self._load_album_assets(
+                normalized_album_id,
+                force_refresh=force_refresh,
+            )
+        except Exception as exc:
+            logger.exception("Failed to load album assets for %s: %s", album_id, exc)
+            return self._asset_failure_result(str(exc) or "Failed to load album assets")
+
+        return self._asset_success_result(album_summary, assets)
+
+    def get_assets_for_album_ids(self, selected_album_ids, force_refresh=False):
+        try:
+            self._require_album_cache_loaded()
+            normalized_ids = self._dedupe_selected_album_ids(selected_album_ids)
+            if not normalized_ids:
+                raise RuntimeError("No albums selected")
+
+            for album_id in normalized_ids:
+                self._require_known_album_id(album_id)
+
+            aggregated_assets = {}
+            for selection_order, album_id in enumerate(normalized_ids):
+                album_assets = self._load_album_assets(
+                    album_id,
+                    force_refresh=force_refresh,
+                )
+                for asset in album_assets:
+                    aggregated_asset = aggregated_assets.setdefault(
+                        asset["asset_id"],
+                        {
+                            "asset_id": asset["asset_id"],
+                            "filename": asset["filename"],
+                            "original_filename": asset["original_filename"],
+                            "created_at": asset["created_at"],
+                            "size": asset["size"],
+                            "media_type": asset["media_type"],
+                            "album_memberships": [],
+                        },
+                    )
+                    aggregated_asset["album_memberships"].append(
+                        {
+                            "album_id": asset["album_id"],
+                            "album_name": asset["album_name"],
+                            "selection_order": selection_order,
+                        }
+                    )
+        except Exception as exc:
+            logger.exception(
+                "Failed to load aggregated album assets for %s: %s",
+                selected_album_ids,
+                exc,
+            )
+            return {
+                "success": False,
+                "selected_album_ids": [],
+                "assets": [],
+                "error": str(exc) or "Failed to load album assets",
+            }
+
+        return {
+            "success": True,
+            "selected_album_ids": list(normalized_ids),
+            "assets": [
+                self._copy_aggregated_asset(asset)
+                for asset in aggregated_assets.values()
+            ],
+            "error": None,
+        }
+
+    def get_cached_album_assets(self, album_id):
+        self._require_album_cache_loaded()
+        normalized_album_id = self._normalize_lookup_album_id(album_id)
+        if normalized_album_id is None:
+            return None
+        if normalized_album_id not in self.asset_cache_loaded_album_ids:
+            return None
+        cached_assets = self.asset_metadata_by_album_id.get(normalized_album_id, [])
+        return [dict(asset) for asset in cached_assets]
+
+    def _load_album_cache(self, force_refresh=False):
+        if self.album_cache_loaded and not force_refresh:
+            return
+
+        raw_albums = self._get_raw_albums()
+        cache_data = self._build_album_cache(raw_albums)
+        self._apply_album_cache(cache_data)
+
+    def _clear_album_cache(self):
+        self.album_cache_loaded = False
+        self.album_list_cache = []
+        self.album_summaries_by_id = {}
+        self.raw_albums_by_id = {}
+        self._clear_asset_cache()
+
+    def _build_album_cache(self, raw_albums):
+        normalized_albums = []
+        summaries_by_id = {}
+        raw_albums_by_id = {}
+
+        for raw_album in raw_albums:
+            summary = self._normalize_album_summary(raw_album)
+            if summary is None:
+                continue
+            normalized_albums.append(summary)
+            summaries_by_id[summary["id"]] = summary
+            raw_albums_by_id[summary["id"]] = raw_album
+
+        normalized_albums.sort(key=lambda album: album["name"].casefold())
+        return {
+            "album_list_cache": normalized_albums,
+            "album_summaries_by_id": summaries_by_id,
+            "raw_albums_by_id": raw_albums_by_id,
+        }
+
+    def _apply_album_cache(self, cache_data):
+        self._clear_asset_cache()
+        self.album_list_cache = cache_data["album_list_cache"]
+        self.album_summaries_by_id = cache_data["album_summaries_by_id"]
+        self.raw_albums_by_id = cache_data["raw_albums_by_id"]
+        self.album_cache_loaded = True
+
+    def _clear_asset_cache(self):
+        self.asset_metadata_by_album_id = {}
+        self.asset_cache_loaded_album_ids = set()
+
+    def _load_album_assets(self, album_id, force_refresh=False):
+        self._require_album_cache_loaded()
+        normalized_album_id = self._require_known_album_id(album_id)
+
+        if (
+            normalized_album_id in self.asset_cache_loaded_album_ids
+            and not force_refresh
+        ):
+            return [dict(asset) for asset in self.asset_metadata_by_album_id[normalized_album_id]]
+
+        album_summary = self.album_summaries_by_id[normalized_album_id]
+        raw_album = self.raw_albums_by_id[normalized_album_id]
+        normalized_assets = []
+
+        for raw_asset in self._iter_raw_album_assets(raw_album):
+            normalized_asset = self._normalize_asset_metadata(raw_asset, album_summary)
+            if normalized_asset is None:
+                continue
+            normalized_assets.append(normalized_asset)
+
+        cached_assets = [dict(asset) for asset in normalized_assets]
+        self.asset_metadata_by_album_id[normalized_album_id] = cached_assets
+        self.asset_cache_loaded_album_ids.add(normalized_album_id)
+        return [dict(asset) for asset in cached_assets]
+
+    def _iter_raw_album_assets(self, raw_album):
+        for candidate in (
+            self._resolve_asset_collection(getattr(raw_album, "assets", None)),
+            self._resolve_asset_collection(getattr(raw_album, "photos", None)),
+            self._resolve_asset_collection(getattr(raw_album, "items", None)),
+            self._resolve_asset_collection(raw_album),
+        ):
+            if candidate is None:
+                continue
+            for asset in candidate:
+                yield asset
+            return
+
+        raise RuntimeError("Album asset library unavailable")
+
+    def _resolve_asset_collection(self, value):
+        if value is None:
+            return None
+
+        if callable(value):
+            value = value()
+
+        if value is None:
+            return None
+
+        if isinstance(value, dict):
+            return list(value.values())
+
+        if isinstance(value, (str, bytes)):
+            return None
+
+        try:
+            return list(value)
+        except TypeError:
+            return None
+
+    def _normalize_asset_metadata(self, raw_asset, album_summary):
+        asset_id = self._read_asset_id(raw_asset)
+        if not asset_id:
+            logger.warning(
+                "Skipping asset in album %s because no stable asset id was available",
+                album_summary["id"],
+            )
+            return None
+
+        filename = self._read_best_filename(raw_asset)
+        original_filename = self._read_best_original_filename(raw_asset) or filename
+
+        return {
+            "asset_id": asset_id,
+            "filename": filename,
+            "original_filename": original_filename,
+            "created_at": self._normalize_created_at(
+                self._read_first_value(
+                    raw_asset,
+                    "created_at",
+                    "created",
+                    "createdAt",
+                    "item_date",
+                    "date_taken",
+                    "addedDate",
+                )
+            ),
+            "size": self._normalize_size(
+                self._read_first_value(
+                    raw_asset,
+                    "size",
+                    "item_size",
+                    "file_size",
+                    "original_size",
+                    "bytes",
+                )
+            ),
+            "media_type": self._normalize_media_type(raw_asset),
+            "album_id": album_summary["id"],
+            "album_name": album_summary["name"],
+        }
+
     def _get_raw_albums(self):
         photos_service = getattr(self.api, "photos", None)
         if photos_service is None:
@@ -120,8 +365,6 @@ class ICloudService:
         }
 
     def _is_album_eligible(self, album):
-        if self._is_system_album(album):
-            return False
         if _album_type_name(album) == "PhotoAlbumFolder":
             return False
         return True
@@ -179,14 +422,204 @@ class ICloudService:
         ]
 
     def _filter_known_album_ids(self, selected_album_ids):
-        if not self.album_summaries_by_id:
-            return selected_album_ids
+        self._require_album_cache_loaded()
 
         return [
             album_id
             for album_id in selected_album_ids
             if album_id in self.album_summaries_by_id
         ]
+
+    def _require_album_cache_loaded(self):
+        if not self.album_cache_loaded:
+            raise RuntimeError("Album cache not loaded")
+
+    def _normalize_lookup_album_id(self, album_id):
+        if album_id is None:
+            return None
+
+        normalized_album_id = str(album_id)
+        if not normalized_album_id:
+            return None
+        return normalized_album_id
+
+    def _require_known_album_id(self, album_id):
+        normalized_album_id = self._normalize_lookup_album_id(album_id)
+        if normalized_album_id is None or normalized_album_id not in self.album_summaries_by_id:
+            raise RuntimeError("Album not found")
+        return normalized_album_id
+
+    def _read_asset_id(self, raw_asset):
+        asset_id = self._read_first_value(
+            raw_asset,
+            "id",
+            "asset_id",
+            "assetId",
+            "guid",
+            "recordName",
+            "photoGuid",
+        )
+        if asset_id is None:
+            return None
+
+        normalized_asset_id = str(asset_id).strip()
+        if not normalized_asset_id:
+            return None
+        return normalized_asset_id
+
+    def _read_best_filename(self, raw_asset):
+        filename = self._read_first_value(
+            raw_asset,
+            "filename",
+            "name",
+            "original_filename",
+            "originalFilename",
+        )
+        return self._normalize_text_value(filename)
+
+    def _read_best_original_filename(self, raw_asset):
+        original_filename = self._read_first_value(
+            raw_asset,
+            "original_filename",
+            "originalFilename",
+            "filename",
+            "name",
+        )
+        return self._normalize_text_value(original_filename)
+
+    def _normalize_created_at(self, value):
+        if value in (None, ""):
+            return None
+
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+            try:
+                value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+
+        if not isinstance(value, datetime):
+            return None
+
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        else:
+            value = value.astimezone(timezone.utc)
+
+        return value.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    def _normalize_size(self, value):
+        if value in (None, ""):
+            return None
+
+        try:
+            normalized_size = int(value)
+        except (TypeError, ValueError):
+            return None
+
+        if normalized_size < 0:
+            return None
+        return normalized_size
+
+    def _normalize_media_type(self, raw_asset):
+        if self._read_first_value(raw_asset, "is_live_photo", "isLivePhoto") is True:
+            return "live-photo"
+        if self._read_first_value(raw_asset, "is_video", "isVideo") is True:
+            return "video"
+
+        raw_value = self._read_first_value(
+            raw_asset,
+            "media_type",
+            "mediaType",
+            "type",
+            "asset_type",
+            "kind",
+        )
+        normalized_value = self._normalize_text_value(raw_value)
+        if normalized_value is None:
+            return "unknown"
+
+        media_type = normalized_value.casefold()
+        if media_type in {"image", "photo", "picture", "jpeg", "jpg", "png", "heic"}:
+            return "image"
+        if media_type in {"video", "movie", "mov", "mp4"}:
+            return "video"
+        if media_type in {"live-photo", "live photo", "livephoto"}:
+            return "live-photo"
+        return "unknown"
+
+    def _read_first_value(self, raw_asset, *field_names):
+        for field_name in field_names:
+            value = self._read_field_value(raw_asset, field_name)
+            if value is None:
+                continue
+            return value
+        return None
+
+    def _read_field_value(self, raw_asset, field_name):
+        if hasattr(raw_asset, field_name):
+            value = getattr(raw_asset, field_name)
+            if callable(value):
+                try:
+                    value = value()
+                except TypeError:
+                    return None
+            return value
+
+        if isinstance(raw_asset, dict):
+            return raw_asset.get(field_name)
+
+        return None
+
+    def _normalize_text_value(self, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized_value = value.strip()
+        else:
+            normalized_value = str(value).strip()
+        if not normalized_value:
+            return None
+        return normalized_value
+
+    def _asset_success_result(self, album_summary, assets):
+        return {
+            "success": True,
+            "album": dict(album_summary),
+            "assets": [dict(asset) for asset in assets],
+            "error": None,
+        }
+
+    def _asset_failure_result(self, error_message):
+        return {
+            "success": False,
+            "album": None,
+            "assets": [],
+            "error": error_message,
+        }
+
+    def _copy_aggregated_asset(self, asset):
+        return {
+            "asset_id": asset["asset_id"],
+            "filename": asset["filename"],
+            "original_filename": asset["original_filename"],
+            "created_at": asset["created_at"],
+            "size": asset["size"],
+            "media_type": asset["media_type"],
+            "album_memberships": [
+                dict(membership)
+                for membership in asset["album_memberships"]
+            ],
+        }
+
+    def _success_result(self, albums):
+        return {
+            "success": True,
+            "albums": [dict(album) for album in albums],
+            "error": None,
+        }
 
     def _failure_result(self, error_message):
         return {
