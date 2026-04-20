@@ -47,11 +47,16 @@ def test_normalize_album_summary_falls_back_to_zero_when_item_count_fails():
     assert result["item_count"] == 0
 
 
-def test_normalize_album_summary_excludes_system_albums():
+def test_normalize_album_summary_includes_system_albums_and_marks_them():
     service = ICloudService(api=None)
     album = SmartPhotoAlbum("smart-1", "Library", item_count=500)
 
-    assert service._normalize_album_summary(album) is None
+    assert service._normalize_album_summary(album) == {
+        "id": "smart-1",
+        "name": "Library",
+        "item_count": 500,
+        "is_system_album": True,
+    }
 
 
 def test_normalize_album_summary_excludes_album_folders():
@@ -61,7 +66,7 @@ def test_normalize_album_summary_excludes_album_folders():
     assert service._normalize_album_summary(album) is None
 
 
-def test_get_albums_returns_normalized_user_albums_only():
+def test_get_albums_returns_normalized_user_and_system_albums():
     service = ICloudService(
         api=build_api(
             [
@@ -85,6 +90,12 @@ def test_get_albums_returns_normalized_user_albums_only():
                 "is_system_album": False,
             },
             {
+                "id": "smart-1",
+                "name": "Library",
+                "item_count": 500,
+                "is_system_album": True,
+            },
+            {
                 "id": "album-2",
                 "name": "Trips",
                 "item_count": 50,
@@ -95,14 +106,21 @@ def test_get_albums_returns_normalized_user_albums_only():
     }
 
 
-def test_get_albums_returns_successful_empty_result_when_no_eligible_albums_exist():
+def test_get_albums_returns_successful_result_for_system_albums():
     service = ICloudService(api=build_api([SmartPhotoAlbum("smart-1", "Library", 500)]))
 
     result = service.get_albums()
 
     assert result == {
         "success": True,
-        "albums": [],
+        "albums": [
+            {
+                "id": "smart-1",
+                "name": "Library",
+                "item_count": 500,
+                "is_system_album": True,
+            }
+        ],
         "error": None,
     }
 

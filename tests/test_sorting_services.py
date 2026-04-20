@@ -2,22 +2,38 @@ from app.icloud.albums_service import AlbumsService
 from app.icloud.icloud_service import DEFAULT_MOCK_SORT_TOTAL, ICloudService
 
 
+def seed_album_cache(service, albums):
+    service.album_cache_loaded = True
+    service.album_list_cache = [dict(album) for album in albums]
+    service.album_summaries_by_id = {
+        album["id"]: dict(album)
+        for album in albums
+    }
+    service.raw_albums_by_id = {
+        album["id"]: object()
+        for album in albums
+    }
+
+
 def test_start_sort_creates_job_and_filters_selected_albums():
     service = ICloudService(api=None)
-    service.album_summaries_by_id = {
-        "album-1": {
-            "id": "album-1",
-            "name": "Vacation 2025",
-            "item_count": 156,
-            "is_system_album": False,
-        },
-        "album-2": {
-            "id": "album-2",
-            "name": "Screenshots",
-            "item_count": 89,
-            "is_system_album": False,
-        },
-    }
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 156,
+                "is_system_album": False,
+            },
+            {
+                "id": "album-2",
+                "name": "Screenshots",
+                "item_count": 89,
+                "is_system_album": False,
+            },
+        ],
+    )
 
     result = service.start_sort(["album-1", "album-2", "album-1", None, "missing"])
 
@@ -50,6 +66,17 @@ def test_get_sort_progress_returns_error_for_unknown_job():
 
 def test_get_sort_progress_advances_running_job():
     service = ICloudService(api=None)
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 156,
+                "is_system_album": False,
+            }
+        ],
+    )
     job_id = service.start_sort(["album-1"])["job_id"]
 
     result = service.get_sort_progress(job_id)
@@ -80,6 +107,14 @@ def test_get_sort_progress_marks_job_complete_when_total_is_reached():
     assert result["processed"] == DEFAULT_MOCK_SORT_TOTAL
     assert result["percent"] == 100
     assert result["message"] == "Sort complete"
+
+
+def test_start_sort_returns_error_when_album_cache_is_cold():
+    service = ICloudService(api=None)
+
+    result = service.start_sort(["album-1"])
+
+    assert result == {"error": "Album cache not loaded"}
 
 
 def test_albums_service_start_sort_returns_error_without_icloud():
