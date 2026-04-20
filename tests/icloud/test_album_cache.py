@@ -128,6 +128,21 @@ def test_clear_album_cache_invalidates_all_cache_structures():
     raw_album = FakeAlbum("album-1", "Trips", item_count=5)
     service, _ = build_service([[raw_album]])
     service.get_albums()
+    service.asset_metadata_by_album_id = {
+        "album-1": [
+            {
+                "asset_id": "asset-1",
+                "filename": "IMG_0001.HEIC",
+                "original_filename": "IMG_0001.HEIC",
+                "created_at": None,
+                "size": None,
+                "media_type": "image",
+                "album_id": "album-1",
+                "album_name": "Trips",
+            }
+        ]
+    }
+    service.asset_cache_loaded_album_ids = {"album-1"}
 
     service._clear_album_cache()
 
@@ -135,6 +150,8 @@ def test_clear_album_cache_invalidates_all_cache_structures():
     assert service.album_list_cache == []
     assert service.album_summaries_by_id == {}
     assert service.raw_albums_by_id == {}
+    assert service.asset_metadata_by_album_id == {}
+    assert service.asset_cache_loaded_album_ids == set()
 
 
 def test_get_cached_album_reads_from_loaded_cache_only():
