@@ -232,7 +232,7 @@ Frontend tests:
 Test execution target for this phase:
 
 - `pytest`
-- `npm test`
+- `npm --prefix frontend test`
 
 If either tool is still unavailable in the environment, keep the tests added and document the execution gap in the implementation notes for the phase.
 
