@@ -140,3 +140,22 @@ def test_albums_service_get_sort_progress_returns_error_without_icloud():
         "percent": 0,
         "message": "Sorting service unavailable",
     }
+
+
+def test_start_sort_returns_error_when_no_albums_selected():
+    service = ICloudService(api=None)
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 156,
+                "is_system_album": False,
+            },
+        ],
+    )
+
+    result = service.start_sort([])
+
+    assert result == {"error": "No albums selected"}

@@ -100,3 +100,31 @@ def test_api_get_sort_progress_delegates_to_albums_service(main_module):
     assert result["status"] == "running"
     assert result["processed"] == 50
     api.albums_service.get_sort_progress.assert_called_once_with("job-123")
+
+
+def test_api_get_albums_empty_success_passthrough(main_module):
+    api = main_module.API()
+    api.albums_service = MagicMock()
+    api.albums_service.get_albums.return_value = {
+        "success": True,
+        "albums": [],
+        "error": None,
+    }
+
+    result = api.get_albums()
+
+    assert result == {
+        "success": True,
+        "albums": [],
+        "error": None,
+    }
+
+
+def test_api_start_sort_error_passthrough_from_service(main_module):
+    api = main_module.API()
+    api.albums_service = MagicMock()
+    api.albums_service.start_sort.return_value = {"error": "Album cache not loaded"}
+
+    result = api.start_sort(["album-1"])
+
+    assert result == {"error": "Album cache not loaded"}
