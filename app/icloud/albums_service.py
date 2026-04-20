@@ -27,6 +27,23 @@ class AlbumsService:
             logger.exception("Failed to fetch albums: %s", exc)
             return self._album_failure(str(exc) or "Failed to fetch albums")
 
+    def get_album_assets(self, album_id):
+        if not self.icloud:
+            logger.warning("get_album_assets called but icloud service is not initialized")
+            return {"success": False, "album": None, "assets": [], "error": "Album service unavailable"}
+
+        try:
+            logger.info("Fetching assets for album %s", album_id)
+            result = self.icloud.get_album_assets(album_id)
+            if result.get("success"):
+                logger.info("Fetched %d assets for album %s", len(result.get("assets", [])), album_id)
+            else:
+                logger.warning("Asset fetch failed for album %s: %s", album_id, result.get("error"))
+            return result
+        except Exception as exc:
+            logger.exception("Failed to fetch assets for album %s: %s", album_id, exc)
+            return {"success": False, "album": None, "assets": [], "error": str(exc) or "Failed to fetch album assets"}
+
     def start_sort(self, selected_album_ids):
         if not self.icloud:
             logger.warning("start_sort called but icloud service is not initialized")
