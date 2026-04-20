@@ -259,7 +259,7 @@ function getAlbumStatusMessage(result) {
   }
 
   if (result.albums.length === 0) {
-    return 'No eligible albums found in iCloud Photos.';
+    return 'No albums found in iCloud Photos.';
   }
 
   return '';

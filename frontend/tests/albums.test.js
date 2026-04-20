@@ -68,7 +68,7 @@ describe("albums.js", () => {
     await albums.loadAlbums();
 
     expect(document.getElementById("albums-status").textContent).toBe(
-      "No eligible albums found in iCloud Photos.",
+      "No albums found in iCloud Photos.",
     );
     expect(document.getElementById("albums-status").hidden).toBe(false);
     expect(document.querySelectorAll("#albums-list li")).toHaveLength(0);
