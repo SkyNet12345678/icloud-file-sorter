@@ -11,58 +11,60 @@ Source documents:
 
 ## Goal
 
-Add a normalized, session-memory per-album asset metadata loader so backend code can resolve selected album IDs into real asset records without turning the album browser into a local-file scan or eager metadata preload step.
+Add a normalized, lazy per-album asset metadata loader on top of the Phase 2 session-memory album cache so backend code can fetch real iCloud asset records for selected albums without changing the album browser into a file-matching step.
 
-This phase is specifically about loading and caching cloud asset metadata for albums that the backend asks for. It should not add local filesystem matching, sorting on disk, JSON persistence, or a mandatory album-detail UI.
+This phase is about backend metadata retrieval and normalization only. It should not introduce local filesystem scanning, JSON persistence, or a UI redesign.
 
 ## Why This Phase Exists
 
-Phase 2 established a usable album summary cache, but the repo still stops at album names and counts:
+Phase 2 left the repo in a good place for album-level lookups, but not yet for asset-level work:
 
-- [app/icloud/icloud_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/icloud_service.py) caches album summaries and raw album objects, but it has no normalized asset loader
-- selected album IDs can resolve back to cached album objects, but there is no backend contract yet for loading asset metadata from those albums
-- `start_sort()` still launches only a temporary mock job and cannot yet prepare real selected-album metadata for later matching work
-- there is no session-memory asset cache keyed by album ID, so later phases would have to either re-fetch assets ad hoc or overload the album browser path
+- [app/icloud/icloud_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/icloud_service.py) now keeps `album_cache_loaded`, `album_list_cache`, `album_summaries_by_id`, and `raw_albums_by_id`
+- `get_cached_album()` and `get_cached_album_summary()` can resolve a selected album ID to cached album data, but there is still no asset loader built on top of those cached raw album handles
+- `start_sort()` still creates a temporary mock job from album names only and does not yet load or reuse any real asset metadata
+- there is no normalized asset metadata shape, so later matching work would otherwise have to reach into raw `pyicloud` objects directly
 
-Phase 3 should fill that gap by making per-album asset metadata available to backend callers while keeping the initial `get_albums()` experience lightweight and fast.
+Phase 3 should close that gap by turning the Phase 2 raw album lookup into a safe per-album asset retrieval boundary with explicit normalization and caching.
 
 ## Phase 3 Scope
 
 In scope:
 
-- define a normalized asset metadata shape for backend use
-- add a per-album asset loader that reads from cached raw album objects
-- cache normalized asset metadata in memory for the current authenticated session
-- support loading assets lazily for one album or a selected subset of albums
-- make missing optional asset fields normalize consistently
-- add backend tests for normalization, caching, and selected-album asset loading helpers
-- keep the existing album browser UI summary-only unless a tiny debug-oriented extension is clearly needed
+- load asset metadata lazily for one album at a time using cached raw album objects from Phase 2
+- normalize raw `pyicloud` asset objects into a backend-friendly metadata shape
+- cache normalized per-album asset metadata in memory for the active authenticated session
+- add helpers for resolving multiple selected album IDs into aggregated asset metadata for later sort preparation
+- preserve multi-album membership and selected album ordering in aggregated helper results so later sort settings can distinguish "move to first selected folder" from "copy to each folder"
+- make cache lifecycle and refresh semantics explicit and test-covered
+- keep the current `get_albums()` bridge response summary-only and lightweight
 
 Out of scope:
 
-- scanning the local iCloud Photos folder
-- matching cloud assets to local files
+- local iCloud Photos folder scanning
+- cloud-to-local filename matching
 - moving or copying files on disk
-- JSON settings or state persistence
-- a full album-detail UI that lists every file in an album
-- replacing the current temporary sort-progress mock with the real sorting engine
+- JSON-backed persistence for asset metadata
+- eager loading of assets for every album during album browsing
+- frontend album detail UI or asset preview UI
+- replacing the temporary mock sort-progress flow with a real sort engine
 
 ## Current Phase 2 Baseline
 
-The repo already has the right starting points for this phase:
+The current repo already has the album-level prerequisites Phase 3 should build on:
 
-- `ICloudService.get_albums()` returns a structured summary payload with `success`, `albums`, and `error`
-- `album_list_cache`, `album_summaries_by_id`, and `raw_albums_by_id` are already maintained in memory
-- `get_cached_album()` and `get_cached_album_summary()` provide read-only album ID lookups after the cache is loaded
-- the album UI already keys selection by stable album IDs and stays focused on names plus counts
+- `ICloudService.get_albums(force_refresh=False)` reuses a session cache of normalized album summaries
+- `raw_albums_by_id` preserves the backend source object needed for later album-specific work
+- `get_cached_album()` and `get_cached_album_summary()` fail clearly when the album cache is cold
+- `AlbumsService.get_albums()` and `API.get_albums()` already preserve the structured album payload the UI expects
+- [app/ui/js/albums.js](/home/mac/code/python/icloud-file-sorter/app/ui/js/albums.js) now submits selected album IDs to the backend, but it still does not need asset-level data during browsing
 
-That means Phase 3 can build mostly inside [app/icloud/icloud_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/icloud_service.py) and [app/icloud/albums_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/albums_service.py), with frontend changes remaining optional.
+That means Phase 3 should stay mostly inside the Python service layer unless a tiny bridge-safe helper becomes necessary in the same change.
 
-## Target Asset Metadata Contract
+## Target Asset Metadata Shape
 
-Phase 3 should introduce one normalized backend shape for per-asset metadata.
+Phase 3 should define one normalized asset record shape for the backend to use going forward.
 
-Recommended normalized asset record:
+Recommended minimum shape:
 
 ```json
 {
@@ -77,49 +79,81 @@ Recommended normalized asset record:
 }
 ```
 
-Notes:
+Normalization rules:
 
-- `filename` should represent the best filename candidate available for later local matching
-- `original_filename` can be kept when `pyicloud` exposes both a display name and a source/original name
-- `created_at`, `size`, and `media_type` should be included only when they can be read reliably, but the normalized keys should still exist with `null` values when missing
-- `album_id` and `album_name` should be stamped onto each normalized asset so later phases do not need to re-thread album context through every call site
-- normalization should happen in one backend helper path rather than being reimplemented in later sorting code
+- `asset_id` must come from a stable identifier exposed by `pyicloud`; if the exact raw field differs, normalize it in one helper
+- if a raw asset does not expose a usable stable identifier, that asset must be skipped during normalization
+- the loader must not emit `asset_id: null` and must not invent an app-generated fallback ID
+- skipped assets should not cause the whole album load to fail by themselves; the album load may still succeed with the remaining normalized assets
+- `filename` should be the best available filename for later local matching work
+- `original_filename` is optional in spirit, but the normalized shape should still include it and set it to `filename` when `pyicloud` does not expose a distinct original-name field
+- `created_at` should be normalized to a timezone-aware UTC ISO 8601 string such as `2025-08-05T12:34:56Z` when the source provides a usable datetime value; otherwise use `null`
+- `size` should be an integer when reliably available; otherwise use `null`
+- `media_type` should normalize to a small controlled set such as `image`, `video`, `live-photo`, or `unknown`
+- `album_id` and `album_name` should be copied from the cached album summary so later matching code does not have to re-resolve that context per asset
 
-Recommended asset-loading result shape:
+Practical note:
+
+- the exact raw `pyicloud` fields should be discovered from real or representative fake objects during implementation, but later code should only consume the normalized shape
+- implementation should log or otherwise make skipped no-id assets observable for debugging, but Phase 3 does not need a user-facing UI for skipped-asset reporting
+
+## Target Aggregated Asset Shape For Multiple Selected Albums
+
+Per-album asset loading can keep album context directly on each normalized record, but the selected-album aggregation helper should preserve shared asset identity and album membership explicitly.
+
+Recommended grouped result for `get_assets_for_album_ids(...)`:
 
 ```json
 {
   "success": true,
-  "album_id": "album-123",
-  "assets": []
+  "selected_album_ids": [
+    "album-123",
+    "album-456"
+  ],
+  "assets": [
+    {
+      "asset_id": "asset-123",
+      "filename": "IMG_1234.HEIC",
+      "original_filename": "IMG_1234.HEIC",
+      "created_at": "2025-08-05T12:34:56Z",
+      "size": 2481934,
+      "media_type": "image",
+      "album_memberships": [
+        {
+          "album_id": "album-123",
+          "album_name": "Vacation 2025",
+          "selection_order": 0
+        },
+        {
+          "album_id": "album-456",
+          "album_name": "Favorites",
+          "selection_order": 1
+        }
+      ]
+    }
+  ],
+  "error": null
 }
 ```
 
-Failure case:
+Rules:
+
+- the aggregation helper should return one record per unique `asset_id` across the selected albums
+- `album_memberships` must preserve the deduped selected album order so later sort code can apply deterministic first-selected-folder behavior
+- the aggregation helper should preserve enough membership context for the MVP multi-album modes:
+  - default: move the asset into the first selected album folder
+  - optional setting: copy the asset into each selected album folder
+- Phase 3 should not decide sort behavior itself; it should only preserve the data later sort code needs
+
+## Target Asset Cache Design
+
+Phase 3 should keep the asset cache session-scoped and explicit, similar to the album cache from Phase 2.
+
+Recommended state inside `ICloudService`:
 
 ```json
 {
-  "success": false,
-  "album_id": "album-123",
-  "assets": [],
-  "error": "Failed to load album assets"
-}
-```
-
-Notes:
-
-- this result shape can stay internal to the backend for now if the UI does not need it
-- a successful empty album asset list must be distinct from a known fetch failure
-
-## Asset Cache Design
-
-Phase 3 should keep asset metadata memory-only and keyed by album ID.
-
-Recommended cache state inside `ICloudService`:
-
-```json
-{
-  "album_assets_by_id": {
+  "asset_metadata_by_album_id": {
     "album-123": [
       {
         "asset_id": "asset-123",
@@ -133,7 +167,7 @@ Recommended cache state inside `ICloudService`:
       }
     ]
   },
-  "album_asset_cache_loaded_ids": [
+  "asset_cache_loaded_album_ids": [
     "album-123"
   ]
 }
@@ -141,195 +175,222 @@ Recommended cache state inside `ICloudService`:
 
 Notes:
 
-- the asset cache should be independent from `album_list_cache` so album browsing stays summary-only
-- cache entries should be keyed by album ID because the UI and later sort path already use stable album IDs
-- a successfully loaded empty asset list for an album should still count as a cached success for that album
-- the cache should not be persisted to JSON in Epic 3
+- `asset_metadata_by_album_id` should hold normalized asset records keyed by album ID
+- `asset_cache_loaded_album_ids` or an equivalent marker is important so the service can distinguish:
+  - a cold cache for that album
+  - a successful load that returned zero assets
+- asset cache should remain memory-only for Epic 3
+- asset cache should be cleared whenever the album cache is fully cleared for a session change
+- asset cache should not be populated during `get_albums()`; it should only load when asset metadata is explicitly requested
 
-## Asset Cache Lifecycle Rules
+## Asset Loader Lifecycle Rules
 
-Phase 3 should make per-album asset loading explicit:
+Phase 3 should make per-album loading behavior explicit:
 
-1. Asset loading must never happen as a side effect of `get_albums()`
-2. Asset loading should require the album cache to already be loaded so the service can resolve album IDs against known albums
-3. The first successful asset load for an album should populate the asset cache for that album only
-4. Repeated asset requests for the same album should reuse cached normalized assets by default
-5. Loading assets for one album must not force eager loading of every album in the account
-6. Multi-album helper methods should load only the requested album IDs, not the full library
-7. If an asset refresh is requested for one album, replace that album's cache atomically and leave other albums untouched
-8. If an asset load fails after a prior successful load for that same album, keep the last known-good asset cache in place unless the caller explicitly wants it cleared
-9. Read-only asset lookup helpers must not perform hidden network work
-10. If a caller asks for assets for an unknown album ID, the service should fail clearly instead of silently fabricating an empty result
+1. Asset loading depends on the album cache already being loaded, because Phase 2 is now the source of truth for album ID to raw album resolution.
+2. `get_album_assets(album_id, force_refresh=False)` should fail clearly if the album cache is cold.
+3. If the album ID does not exist in the loaded album cache, return a clear album-not-found style failure instead of silently treating it as an empty asset list.
+4. On first successful load for a given album ID, cache the normalized asset records for that album.
+5. Repeated asset requests for the same album ID should reuse the per-album cache by default.
+6. A valid empty asset list for an album should be cacheable as a successful load.
+7. `force_refresh=True` should rebuild only the requested album's asset metadata and swap it in atomically.
+8. If an asset refresh fails after a prior successful load, keep the last known-good asset cache for that album in place.
+9. Refreshing or clearing the album cache should also invalidate all per-album asset cache entries so raw album handles and asset metadata cannot drift apart.
+10. Read-only asset lookup helpers should never trigger hidden network work.
 
 ## Recommended Service API Shape
 
-The current `pywebview` bridge does not need to expose a new asset-loading method yet unless the UI is intentionally expanded in the same change. The main work should stay inside the service layer.
+The bridge contract does not need to change for this phase, but the internal service API should become ready for later sort-time orchestration.
 
 Recommended additions in [app/icloud/icloud_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/icloud_service.py):
 
 - `get_album_assets(album_id, force_refresh=False)`
-- `get_assets_for_album_ids(album_ids, force_refresh=False)`
+- `get_assets_for_album_ids(selected_album_ids, force_refresh=False)`
 - `get_cached_album_assets(album_id)`
 - `_load_album_assets(album_id, force_refresh=False)`
-- `_normalize_album_asset(raw_asset, album_summary)`
-- `_read_raw_album_assets(raw_album)`
+- `_normalize_asset_metadata(raw_asset, album_summary)`
+- `_iter_raw_album_assets(raw_album)` or an equivalent raw-object adapter helper
+- `_clear_asset_cache()` with synchronization from `_clear_album_cache()`
 
 Behavior:
 
-- `get_album_assets(album_id, force_refresh=False)` should validate the album cache, resolve the cached album, and return normalized assets for that album
-- `get_assets_for_album_ids(album_ids, force_refresh=False)` should dedupe IDs, fail clearly on unknown albums, and return only the requested albums' normalized assets
-- `get_cached_album_assets(album_id)` should remain read-only and should not trigger a fetch if the album is cold
-- `_read_raw_album_assets(raw_album)` should isolate how raw asset objects are read from `pyicloud`
-- `_normalize_album_asset(raw_asset, album_summary)` should own fallback logic for filenames, timestamps, sizes, and media types so later phases can trust one normalized shape
+- `get_album_assets(album_id, force_refresh=False)` should return a structured result shape, not raw `pyicloud` objects
+- `get_assets_for_album_ids(selected_album_ids, force_refresh=False)` should dedupe album IDs while preserving selected order, reuse per-album cache where possible, and return one aggregated record per unique asset with ordered `album_memberships`
+- `_normalize_asset_metadata(...)` should own all asset field cleanup so there is only one normalization path
+- `_iter_raw_album_assets(raw_album)` should isolate the quirks of how `pyicloud` exposes album contents
+- `get_cached_album_assets(album_id)` should be read-only and should fail clearly or return `None`-style misses when the requested album has not been loaded yet
 
-Recommended responsibilities in [app/icloud/albums_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/albums_service.py):
+Recommended result shape for one-album retrieval:
 
-- keep the backend orchestration layer bridge-friendly
-- expose a safe selected-album asset-loading path if `start_sort()` needs to prepare real album metadata before the mock job begins
-- preserve clear errors for unknown album IDs, unloaded cache state, and asset fetch failures
+```json
+{
+  "success": true,
+  "album": {
+    "id": "album-123",
+    "name": "Vacation 2025",
+    "item_count": 179,
+    "is_system_album": false
+  },
+  "assets": [],
+  "error": null
+}
+```
 
-Recommended bridge behavior in [app/main.py](/home/mac/code/python/icloud-file-sorter/app/main.py):
+Failure case:
 
-- keep `get_albums()` unchanged
-- keep the existing login and 2FA flow unchanged
-- only add a new bridge method if Phase 3 intentionally introduces a debug album-detail flow or a UI-visible asset inspection action
+```json
+{
+  "success": false,
+  "album": null,
+  "assets": [],
+  "error": "Album not found"
+}
+```
 
-## Sort-Time Hand-Off Expectations
-
-Phase 3 should prepare the backend hand-off for later sorting work without implementing local matching yet.
-
-That means:
-
-- `start_sort(selected_album_ids)` can remain a mock progress flow for now
-- the backend should gain a clear helper for resolving selected album IDs into real album summaries plus cached-or-loaded asset metadata
-- comments or helper names should make it obvious that local file scanning and matching still belong to Epic 4
-- any temporary sort mock should avoid depending on synthetic album rows once selected album metadata can be resolved from the real cache
+Using a structured result keeps asset retrieval consistent with the Phase 1 album-list contract and makes failures easier to distinguish from genuine empty albums.
 
 ## Planned File Changes
 
 Primary implementation files:
 
 - [app/icloud/icloud_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/icloud_service.py)
-- [app/icloud/albums_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/albums_service.py)
-- [app/main.py](/home/mac/code/python/icloud-file-sorter/app/main.py) only if a bridge-visible helper is deliberately added
+- [app/icloud/albums_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/albums_service.py) if the orchestration layer exposes or wraps the new backend helpers
 
 Primary test files:
 
-- [tests/test_sorting_services.py](/home/mac/code/python/icloud-file-sorter/tests/test_sorting_services.py)
-- [tests/test_main_api_bridge.py](/home/mac/code/python/icloud-file-sorter/tests/test_main_api_bridge.py) only if the bridge changes
+- [tests/icloud/test_album_cache.py](/home/mac/code/python/icloud-file-sorter/tests/icloud/test_album_cache.py)
 - `tests/icloud/test_album_asset_metadata.py`
-- `tests/icloud/test_album_asset_cache.py`
 - `tests/icloud/test_album_asset_loading.py`
 
-Frontend files:
+Files that should not need changes for the default Phase 3 path:
 
-- no frontend changes are required for the default Phase 3 path
-- [frontend/tests/albums.test.js](/home/mac/code/python/icloud-file-sorter/frontend/tests/albums.test.js) should only change if a UI-facing asset-detail feature is added in the same implementation
+- [app/main.py](/home/mac/code/python/icloud-file-sorter/app/main.py)
+- [app/ui/js/albums.js](/home/mac/code/python/icloud-file-sorter/app/ui/js/albums.js)
+- frontend tests, unless implementation intentionally exposes asset-loading behavior through the bridge in the same change
 
 ## Implementation Tasks
 
-### 1. Inspect raw `pyicloud` asset objects and define normalization rules
+### 1. Inspect raw asset objects and define normalization rules
 
 Work:
 
-- identify which raw asset fields reliably expose asset ID, filename, created date, size, and media type
-- define fallback order for filename extraction when multiple raw name fields exist
-- define how timestamps should be normalized when `pyicloud` returns `datetime` objects, strings, or missing values
-- define how optional fields should normalize to `null` instead of forcing later code to branch on missing keys
+- inspect how a cached raw album exposes its asset collection
+- identify which raw fields can reliably supply asset ID, filename, created-at, size, and media type
+- define fallbacks for missing optional metadata
+- define and test the skip behavior for raw assets that do not expose a stable identifier
+- create representative fake asset fixtures for tests
 
 Output:
 
-- one normalization path from raw asset objects to backend asset records
-- representative fake asset fixtures for test coverage
+- one normalization path from raw `pyicloud` asset objects to backend asset metadata
+- fixture coverage for the raw object variability the repo has to tolerate
 
-### 2. Add per-album asset loading in `ICloudService`
+### 2. Add per-album asset cache state to `ICloudService`
 
 Work:
 
-- add a service method that loads assets for one cached album
-- keep album cache validation explicit so unknown or unloaded album IDs fail clearly
-- avoid changing `get_albums()` or loading assets eagerly during album browsing
-- stamp `album_id` and `album_name` onto every normalized asset record
+- add asset-cache structures keyed by album ID
+- keep empty-success and cold-cache states distinct
+- synchronize asset cache invalidation with album cache invalidation
 
 Output:
 
-- backend callers can request real asset metadata for a specific album on demand
+- one authoritative session-memory asset cache owned by `ICloudService`
 
-### 3. Add session-memory asset caching by album ID
+### 3. Implement lazy `get_album_assets(album_id)`
 
 Work:
 
-- cache normalized asset lists by album ID after successful loads
-- return cached assets on repeated requests by default
-- support an explicit refresh path for one album without disturbing the whole cache
-- keep cache updates atomic per album so failed refreshes do not partially replace good data
+- resolve the album ID through the existing Phase 2 album cache
+- use the cached raw album object to retrieve album contents
+- normalize raw assets into the Phase 3 backend metadata shape
+- cache the normalized asset records for that album
+- return a structured success or failure payload
 
 Output:
 
-- per-album asset loading becomes cheap and predictable after the first successful fetch
+- backend can load one album's real asset metadata without touching local filesystem work
 
-### 4. Add selected-album asset loading helpers
+### 4. Add grouped selected-album helper for later sort preparation
 
 Work:
 
-- add a helper that accepts selected album IDs and returns resolved album summaries plus per-album asset metadata
-- dedupe selected IDs and preserve a stable processing order
-- fail clearly when the selection includes unknown album IDs
-- avoid implicit loading for unrelated albums
+- implement `get_assets_for_album_ids(selected_album_ids, force_refresh=False)`
+- dedupe selected IDs and preserve deterministic ordering
+- reuse cached per-album assets where available
+- merge repeated assets across selected albums into one aggregated record per `asset_id`
+- preserve ordered `album_memberships` so later sort code can support both move-to-first-selected-folder and copy-to-each-folder modes without re-reading raw `pyicloud` objects
 
 Output:
 
-- later sort phases can consume a backend-selected-album metadata hand-off instead of rebuilding it from raw album objects
+- later phases get a clean hand-off from selected album IDs to normalized album asset metadata
 
-### 5. Keep the bridge and UI lightweight by default
+### 5. Keep album browsing summary-only
 
 Work:
 
-- preserve the existing `get_albums()` response shape
-- avoid introducing an album-detail page unless it is explicitly wanted for debugging or support
-- if a UI-visible asset inspection affordance is added, keep it optional and clearly separate from sorting
+- ensure `get_albums()` remains summary-only and does not load per-album assets
+- avoid changing the `pywebview` bridge or current UI unless a concrete requirement appears during implementation
+- keep `start_sort()` behavior unchanged in this phase unless a tiny backend-only preloading hook is intentionally introduced and test-covered
 
 Output:
 
-- the login -> album list flow stays fast and familiar
+- album browsing stays fast
+- Phase 3 does not accidentally turn into sort-engine work
 
-### 6. Add asset-focused test coverage
+### 6. Add asset-loading tests before later matching work builds on top
 
 Work:
 
-- add unit tests for asset normalization with complete and partial fake asset objects
-- add tests for per-album cache hits, refreshes, and failed refresh behavior
-- add tests for unknown album IDs and cold-cache behavior
-- add tests for multi-album loading helpers that only load requested albums
-- update mock sort tests as needed so they can work with real selected-album metadata without depending on eager file matching
+- add unit tests for asset normalization with missing fields
+- add tests for per-album cache hits and refresh
+- add tests for unknown album IDs and cold-cache failures
+- add tests confirming album cache refresh/clear invalidates asset cache safely
+- add tests for grouped selected-album asset loading
+- add tests confirming shared assets across multiple selected albums preserve ordered memberships in the aggregated result
 
 Output:
 
-- asset loading behavior is locked down before Epic 4 builds local matching on top of it
+- Phase 3 asset semantics are locked down before Epic 4 starts matching local files
 
 ## Test Plan
 
 Python unit tests:
 
-- add `tests/icloud/test_album_asset_metadata.py` for raw-asset-to-normalized-record conversion
-- cover missing filename, missing size, missing created date, and missing media-type cases
-- verify timestamp normalization is consistent
-- verify album context fields are stamped onto normalized assets
+- add `tests/icloud/test_album_asset_metadata.py` for raw-asset-to-normalized-metadata coverage
+- cover missing `size`, missing `created_at`, and missing or unexpected media-type fields
+- cover filename fallback rules and `original_filename` behavior
+- cover normalization of a stable `asset_id`
+- cover skipping raw assets that do not expose a usable stable identifier
+- confirm skipped no-id assets do not produce normalized records with `asset_id: null`
+- cover normalization of `created_at` into a timezone-aware UTC ISO 8601 string
+- confirm naive or unusable datetime inputs normalize to the canonical UTC format or `null`, rather than leaking inconsistent timestamp strings
 
-Python cache and service tests:
+Python service tests:
 
-- add `tests/icloud/test_album_asset_cache.py` for first-load, repeat-load, refresh, and refresh-failure behavior
-- add `tests/icloud/test_album_asset_loading.py` for per-album and multi-album load helpers
-- verify successful empty asset lists are cacheable as a valid state
-- verify unknown album IDs return a clear failure instead of an empty success
-- verify cold-cache access fails clearly and does not perform hidden album discovery
-- verify `get_assets_for_album_ids()` only loads requested albums and reuses cached results when available
+- add `tests/icloud/test_album_asset_loading.py` for:
+  - first-load asset cache population per album
+  - repeated `get_album_assets()` calls reusing cache
+  - `force_refresh=True` for one album only
+  - empty successful asset results
+  - unknown album IDs returning a clear failure
+  - cold-cache behavior when album cache has not been loaded yet
+  - clearing or refreshing album cache invalidating per-album asset cache
+  - grouped selected-album asset loading through `get_assets_for_album_ids(...)`
+  - albums containing a mix of valid assets and no-id assets, confirming the load succeeds and only valid assets are cached
+  - albums where all raw assets are skipped for missing IDs, confirming this is treated as a successful empty asset result rather than an album-load failure
+  - assets that appear in multiple selected albums, confirming the aggregated helper returns one asset record with ordered `album_memberships`
+  - selected album ordering is preserved in aggregated membership output so later first-selected-folder behavior is deterministic
 
-Existing repo test updates:
+Existing regression coverage to preserve:
 
-- update [tests/test_sorting_services.py](/home/mac/code/python/icloud-file-sorter/tests/test_sorting_services.py) if Phase 3 adds selected-album metadata helpers used by `start_sort()`
-- update [tests/test_main_api_bridge.py](/home/mac/code/python/icloud-file-sorter/tests/test_main_api_bridge.py) only if a new bridge-visible method is added
-- leave [frontend/tests/albums.test.js](/home/mac/code/python/icloud-file-sorter/frontend/tests/albums.test.js) unchanged unless the frontend gains an asset-detail behavior
+- keep [tests/icloud/test_album_cache.py](/home/mac/code/python/icloud-file-sorter/tests/icloud/test_album_cache.py) passing while asset cache is added beside album cache
+- keep [tests/test_sorting_services.py](/home/mac/code/python/icloud-file-sorter/tests/test_sorting_services.py) passing so the temporary sort mock remains stable while Phase 3 stays backend-only
+
+Frontend tests:
+
+- no frontend changes should be required for the default Phase 3 path
+- if a bridge-visible helper is added anyway, update frontend tests in the same change rather than leaving contract drift behind
 
 Test execution target for this phase:
 
@@ -342,40 +403,64 @@ If either tool is unavailable in the environment, keep the tests added and docum
 
 Phase 3 is complete when:
 
-- the backend can load normalized asset metadata for a specific cached album by album ID
-- normalized asset metadata includes filename plus any reliable size, timestamp, and media-type fields exposed by `pyicloud`
-- missing optional asset fields normalize consistently instead of producing ad hoc shapes
-- per-album asset metadata is cached in memory for the active authenticated session
-- repeated asset requests for the same album reuse cache by default
-- loading assets for one album does not eagerly load every album in the account
-- selected album IDs can resolve to real album summaries plus per-album asset metadata for later sort work
-- the album browser remains summary-only and does not become a local file scan or eager asset preload path
-- no local filesystem scanning or cloud-to-local matching is introduced in this phase
-- no JSON persistence or database layer is introduced for album metadata
-- backend tests cover normalization, cache semantics, unknown album handling, and selected-album asset loading well enough to support Epic 4
+- `ICloudService` can lazily load normalized asset metadata for a selected album using the cached raw album handle from Phase 2
+- normalized asset metadata includes a stable upstream `asset_id`, `filename`, album context, and any reliable size/date/media-type fields exposed by `pyicloud`
+- raw assets that do not expose a usable stable identifier are skipped rather than normalized with a null or synthetic `asset_id`
+- skipped no-id assets do not by themselves cause album asset loading to fail
+- missing optional fields are normalized consistently instead of leaking raw-object quirks to callers
+- per-album asset metadata is cached in memory by album ID for the active authenticated session
+- repeated asset loads for the same album reuse cache by default
+- a valid empty album asset list is cacheable as a successful load
+- refreshing or clearing the album cache invalidates the asset cache so album and asset state cannot drift apart
+- backend callers can load asset metadata for multiple selected album IDs without rediscovering the full album list or touching local file matching
+- aggregated selected-album asset results preserve all selected album memberships for shared assets and keep membership ordering deterministic
+- `get_albums()` remains summary-only and does not trigger per-album asset loading
+- no JSON persistence or database layer is introduced for album or asset metadata
+- the existing login -> optional 2FA -> album list flow remains unchanged from the user's perspective
+- local filesystem scanning and cloud-to-local matching still do not run during album browsing or simple asset metadata loading
 
 ## Risks And Mitigations
 
-`pyicloud` asset shape variability:
+Asset object shape variability:
 
-- mitigate by isolating all raw-field reading inside normalization helpers and by testing with representative fake objects instead of exact production internals
+- mitigate by isolating normalization in one helper and building tests around representative fake objects instead of exact production internals
 
-Missing or unreliable filename fields:
+Missing or unstable upstream asset identifiers:
 
-- mitigate by defining a strict fallback order for filename extraction and by normalizing missing values explicitly
+- mitigate by requiring `asset_id` to come from a stable `pyicloud` identifier only
+- skip assets that do not expose a usable identifier instead of inventing fallback IDs that would make later dedupe or resumability unsafe
 
-Large albums making eager loads expensive:
+Album membership or ordering loss during multi-album aggregation:
 
-- mitigate by keeping asset loading per album and on demand, never inside `get_albums()`
+- mitigate by returning one aggregated record per unique asset with ordered `album_memberships`
+- preserve deduped selected album order so later MVP sort behavior can reliably choose the first selected folder or copy to each folder
 
-Cache inconsistency between album summaries and asset metadata:
+Asset iteration may be slower than expected for large albums:
 
-- mitigate by requiring album cache resolution before asset loading and by keying asset caches to stable album IDs
+- mitigate by loading assets lazily per selected album instead of during `get_albums()`
+- reuse per-album cache by default once loaded
 
-Refresh failure clobbering good asset cache:
+Album and asset cache drift:
 
-- mitigate by rebuilding one album's normalized asset list off to the side and swapping it in only after a successful refresh
+- mitigate by clearing asset cache whenever album cache is cleared or fully refreshed
+- keep refresh behavior atomic so a failed reload does not leave mixed state behind
 
-Bridge drift caused by exposing asset metadata too early:
+Filename metadata may be inconsistent across asset types:
 
-- mitigate by keeping the default Phase 3 implementation backend-only unless there is a clear UI need in the same change
+- mitigate by defining a strict fallback order for `filename` and `original_filename`
+- normalize missing values to `null` or a controlled fallback instead of leaking raw fields
+
+Phase 3 accidentally grows into sort-engine work:
+
+- mitigate by keeping the bridge and UI unchanged by default
+- keep `start_sort()` as the existing mock workflow unless a narrowly scoped backend hand-off helper is explicitly added and test-covered
+
+## Exit State For Phase 4 And Beyond
+
+When this phase is done, the repo should have a clear backend boundary for:
+
+- album summary retrieval through `get_albums()`
+- album ID to raw album resolution through the Phase 2 cache
+- per-album asset metadata retrieval through normalized, cached backend helpers
+
+That gives later phases a clean foundation for real sort preparation and local file matching without having to rediscover album data or parse raw `pyicloud` asset objects throughout the codebase.

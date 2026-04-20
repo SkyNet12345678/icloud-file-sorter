@@ -25,6 +25,7 @@ At the end of this epic, the app should:
 - display them in the existing album selection UI
 - keep album browsing metadata-only and lightweight
 - hold album and asset metadata in memory for the active session
+- preserve ordered album memberships for assets that belong to multiple selected albums so later sort behavior can remain deterministic
 - defer any local filesystem scanning and cloud-to-local matching until sorting begins
 - distinguish between known album-fetch failures and a genuine "no albums" result
 
@@ -133,6 +134,17 @@ Notes:
 - prefer normalizing values in one place before the rest of the app uses them
 - keep this cache session-only for Epic 3
 
+### Aggregated Multi-Album Asset Metadata
+
+When backend code resolves multiple selected albums at once, the result should preserve shared asset identity and ordered album membership.
+
+Notes:
+
+- the aggregation helper should return one record per unique asset
+- each aggregated asset record should preserve all selected album memberships for that asset
+- album memberships should preserve selected album order so later sort behavior can deterministically choose the first selected folder by default
+- this epic should preserve the metadata needed for later sort settings, not implement the sort policy itself
+
 ## Service Design
 
 Add a clear separation between summary retrieval and deeper asset metadata retrieval.
@@ -154,7 +166,7 @@ Recommended internal structure:
 - `get_album_assets(album_id)`:
   returns normalized asset metadata for a single album during sort-time preparation, not during initial album browsing
 - `get_assets_for_album_ids(selected_album_ids)`:
-  bridge-friendly helper for later sort initiation, converting UI selections into album metadata
+  bridge-friendly helper for later sort initiation, converting UI selections into ordered album-aware asset metadata
 - private normalization helpers:
   isolate `pyicloud` object quirks and missing fields
 
@@ -244,12 +256,14 @@ Deliverables:
 - normalized asset metadata loader per album
 - session-memory cache for assets keyed by album ID
 - data fields chosen to support later filename-based matching
+- aggregated multi-album metadata that preserves ordered album memberships for shared assets
 
 Acceptance criteria:
 
 - asset retrieval is available to backend services without changing the album browser into a file-matching step
 - metadata includes at least filename and any reliable size/date/media-type fields exposed by `pyicloud`
 - missing optional fields are normalized consistently
+- multi-album aggregation preserves all selected album memberships for shared assets and keeps selected order deterministic for later sort behavior
 
 ## Phase 4: Integrate Real Data Into Album Browser
 

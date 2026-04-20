@@ -73,6 +73,7 @@ Scope:
 - fetch album list via `pyicloud`
 - fetch per-asset metadata for selected albums
 - hold album and asset metadata in memory for the current session
+- preserve ordered album memberships for assets that appear in multiple selected albums
 - build the album browser UI around real data
 - keep album detail view optional unless it becomes necessary for debugging or support
 
@@ -108,6 +109,8 @@ Scope:
 - create album subfolders inside the iCloud Photos folder
 - move matched files into those folders for the current MVP direction
 - define the behavior for files that belong to multiple albums
+- default MVP behavior: move the asset into the first selected album folder
+- optional MVP setting: copy the asset into each selected album folder
 - record sort outcomes in JSON state
 - support incremental or resumable behavior where practical
 - build the sort manager UI around real progress
@@ -127,6 +130,7 @@ Scope:
 - source folder setting with auto-detect plus manual override
 - startup prerequisite detection for iCloud for Windows installation and folder presence
 - sort behavior options such as move/copy and multi-album handling
+- include an MVP multi-album mode setting with `move_first_selected_album` as the default and `copy_to_each_album` as the initial alternative
 - settings UI
 - load and save settings on startup via JSON
 
