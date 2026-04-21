@@ -1,5 +1,6 @@
 import { login, submit2FA, restartLogin } from './login.js';
 import { startSort, cancelSort, testFetchAlbumAssets } from './albums.js';
+import { loadSettings, saveSettings, showCopyWarning } from './settings.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const loginBtn = document.getElementById('loginBtn');
@@ -8,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const startButton = document.getElementById('download-btn');
   const cancelButton = document.getElementById('cancel-btn');
   const testFetchBtn = document.getElementById('test-fetch-btn');
+  const sourceFolderInput = document.getElementById('source-folder-input');
+  const sortingApproach = document.getElementById('sorting-approach');
 
   loginBtn.addEventListener('click', login);
   verifyBtn.addEventListener('click', submit2FA);
@@ -15,4 +18,17 @@ document.addEventListener('DOMContentLoaded', () => {
   startButton.addEventListener('click', startSort);
   cancelButton.addEventListener('click', cancelSort);
   testFetchBtn.addEventListener('click', testFetchAlbumAssets);
+
+  if (sourceFolderInput) {
+    sourceFolderInput.addEventListener('change', () => {
+      saveSettings(sourceFolderInput.value, sortingApproach?.value);
+    });
+  }
+  if (sortingApproach) {
+    sortingApproach.addEventListener('change', () => {
+      saveSettings(sourceFolderInput?.value, sortingApproach.value);
+    });
+  }
+
+  loadSettings();
 });
