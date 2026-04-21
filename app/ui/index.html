@@ -37,6 +37,21 @@
         <p>Organize your iCloud photos into folders.</p>
         <p id="albums-status" class="status-message" hidden></p>
         <br>
+        <div class="settings-section">
+          <h3>Settings</h3>
+          <label for="source-folder-input">Source folder (iCloud Photos):</label>
+          <input id="source-folder-input" type="text" placeholder="Auto-detecting..." />
+          <label for="sorting-approach">Sorting approach:</label>
+          <select id="sorting-approach">
+            <option value="first">Move to first matching album</option>
+            <option value="copy">Copy to all matching albums</option>
+          </select>
+          <div id="copy-warning" class="warning-message" style="display: none">
+            Copy will download full-resolution files from iCloud before copying.
+            This may take significant time and storage for large albums.
+          </div>
+        </div>
+        <br>
         <h3>Select albums to organize:</h3>
         <ul id="albums-list" class="albums-list"></ul>
 
