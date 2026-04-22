@@ -291,6 +291,7 @@ def test_get_assets_for_album_ids_dedupes_selection_and_preserves_membership_ord
 
 
 def test_start_sort_forces_fresh_asset_refresh_for_selected_albums_only(tmp_path):
+    (tmp_path / "IMG_0002.HEIC").write_text("asset-2", encoding="utf-8")
     album_one = FakeAlbum(
         "album-1",
         "Trips",
@@ -319,6 +320,12 @@ def test_start_sort_forces_fresh_asset_refresh_for_selected_albums_only(tmp_path
 
     assert matching_progress["status"] == "matching"
     assert matching_progress["total"] == 1
+    assert matching_progress["match_results"] == {
+        "matched": 0,
+        "fallback_matched": 0,
+        "not_found": 0,
+        "ambiguous": 0,
+    }
     assert album_one.asset_request_count == 2
     assert album_two.asset_request_count == 1
     assert service.jobs[result["job_id"]]["selected_assets"] == [
@@ -336,5 +343,34 @@ def test_start_sort_forces_fresh_asset_refresh_for_selected_albums_only(tmp_path
                     "selection_order": 0,
                 }
             ],
+        }
+    ]
+
+    running_progress = service.get_sort_progress(result["job_id"])
+
+    assert running_progress["status"] == "running"
+    assert running_progress["match_results"] == {
+        "matched": 1,
+        "fallback_matched": 0,
+        "not_found": 0,
+        "ambiguous": 0,
+    }
+    assert service.jobs[result["job_id"]]["match_results"]["assets"] == [
+        {
+            "asset_id": "asset-2",
+            "filename": "IMG_0002.HEIC",
+            "original_filename": "IMG_0002.HEIC",
+            "created_at": None,
+            "size": None,
+            "media_type": "image",
+            "album_memberships": [
+                {
+                    "album_id": "album-1",
+                    "album_name": "Trips",
+                    "selection_order": 0,
+                }
+            ],
+            "local_path": str(tmp_path / "IMG_0002.HEIC"),
+            "match_type": "exact",
         }
     ]

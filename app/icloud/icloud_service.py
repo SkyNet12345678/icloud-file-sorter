@@ -3,6 +3,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.scanner import LocalScanner
+
 logger = logging.getLogger("icloud-sorter")
 
 DEFAULT_MOCK_SORT_TOTAL = 1847
@@ -65,9 +67,11 @@ class ICloudService:
             "selected_albums": selected_albums,
             "selected_assets": [],
             "source_folder": source_folder,
+            "match_results": self._empty_match_results(),
             "message": self._build_preparing_message(),
             "_matching_reported": False,
             "_matching_prepared": False,
+            "_matching_completed": False,
         }
 
         return {"job_id": job_id}
@@ -637,10 +641,14 @@ class ICloudService:
             "percent",
             "message",
         )
-        return {
+        progress = {
             key: job[key]
             for key in progress_keys
         }
+        progress["match_results"] = self._copy_match_results_summary(
+            job.get("match_results")
+        )
+        return progress
 
     def _advance_matching_job(self, job):
         if not job.get("_matching_reported"):
@@ -669,11 +677,27 @@ class ICloudService:
             job["_matching_prepared"] = True
             return self._copy_job_progress(job)
 
+        if not job.get("_matching_completed"):
+            try:
+                scanner = LocalScanner(job["source_folder"])
+                scanner.scan()
+                job["match_results"] = scanner.match_assets(job["selected_assets"])
+            except Exception as exc:
+                logger.exception("Failed to match local files for job %s: %s", job["job_id"], exc)
+                job["status"] = "error"
+                job["processed"] = 0
+                job["total"] = 0
+                job["percent"] = 0
+                job["message"] = "Failed to scan the local source folder for matching files"
+                return self._copy_job_progress(job)
+
+            job["_matching_completed"] = True
+
         job["status"] = "running"
         job["processed"] = 0
         job["total"] = DEFAULT_MOCK_SORT_TOTAL
         job["percent"] = 0
-        job["message"] = f"Starting sort for {len(job['selected_album_ids'])} album(s)..."
+        job["message"] = self._build_running_message(job)
         return self._copy_job_progress(job)
 
     def _build_matching_message(self, selected_assets):
@@ -683,6 +707,36 @@ class ICloudService:
 
     def _build_preparing_message(self):
         return "Preparing matching job..."
+
+    def _build_running_message(self, job):
+        match_results = self._copy_match_results_summary(job.get("match_results"))
+        return (
+            f"Starting sort for {len(job['selected_album_ids'])} album(s). "
+            f"Exact: {match_results['matched']} | "
+            f"Fallback: {match_results['fallback_matched']} | "
+            f"Not found: {match_results['not_found']} | "
+            f"Ambiguous: {match_results['ambiguous']}"
+        )
+
+    def _empty_match_results(self):
+        return {
+            "matched": 0,
+            "fallback_matched": 0,
+            "not_found": 0,
+            "ambiguous": 0,
+            "assets": [],
+        }
+
+    def _copy_match_results_summary(self, match_results):
+        summary = self._empty_match_results()
+        if isinstance(match_results, dict):
+            for key in ("matched", "fallback_matched", "not_found", "ambiguous"):
+                try:
+                    summary[key] = int(match_results.get(key, 0))
+                except (TypeError, ValueError):
+                    summary[key] = 0
+        summary.pop("assets")
+        return summary
 
     def _require_source_folder(self):
         source_folder = None
