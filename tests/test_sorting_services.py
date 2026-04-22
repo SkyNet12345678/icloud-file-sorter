@@ -78,7 +78,7 @@ def test_get_albums_keeps_album_browsing_lightweight():
     assert album.asset_request_count == 0
 
 
-def test_start_sort_fetches_selected_album_assets_only_and_enters_matching(tmp_path):
+def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
     service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
     album_one = FakeAlbum(
         "album-1",
@@ -127,22 +127,56 @@ def test_start_sort_fetches_selected_album_assets_only_and_enters_matching(tmp_p
     job = service.jobs[result["job_id"]]
     assert job["status"] == "matching"
     assert job["processed"] == 0
-    assert job["total"] == 2
+    assert job["total"] == 0
     assert job["percent"] == 0
     assert job["selected_album_ids"] == ["album-1", "album-2"]
     assert job["selected_albums"] == ["Vacation 2025", "Screenshots"]
     assert job["source_folder"] == str(tmp_path)
-    assert len(job["selected_assets"]) == 2
-    assert job["message"] == "Fetched iCloud metadata for 2 assets. Matching local files..."
+    assert job["selected_assets"] == []
+    assert job["message"] == "Preparing matching job..."
+    assert album_one.asset_request_count == 0
+    assert album_two.asset_request_count == 0
+    assert album_three.asset_request_count == 0
+
+    initial_matching_progress = service.get_sort_progress(result["job_id"])
+
+    assert initial_matching_progress == {
+        "job_id": result["job_id"],
+        "status": "matching",
+        "processed": 0,
+        "total": 0,
+        "percent": 0,
+        "message": "Preparing matching job...",
+    }
+    assert album_one.asset_request_count == 0
+    assert album_two.asset_request_count == 0
+    assert album_three.asset_request_count == 0
+
+    prepared_matching_progress = service.get_sort_progress(result["job_id"])
+
+    assert prepared_matching_progress == {
+        "job_id": result["job_id"],
+        "status": "matching",
+        "processed": 0,
+        "total": 2,
+        "percent": 0,
+        "message": "Fetched iCloud metadata for 2 assets. Matching local files...",
+    }
+    assert len(service.jobs[result["job_id"]]["selected_assets"]) == 2
     assert album_one.asset_request_count == 1
     assert album_two.asset_request_count == 1
     assert album_three.asset_request_count == 0
 
-    matching_progress = service.get_sort_progress(result["job_id"])
+    running_progress = service.get_sort_progress(result["job_id"])
 
-    assert matching_progress["status"] == "matching"
-    assert matching_progress["total"] == 2
-    assert matching_progress["message"] == "Fetched iCloud metadata for 2 assets. Matching local files..."
+    assert running_progress == {
+        "job_id": result["job_id"],
+        "status": "running",
+        "processed": 0,
+        "total": DEFAULT_MOCK_SORT_TOTAL,
+        "percent": 0,
+        "message": "Starting sort for 2 album(s)...",
+    }
 
 
 def test_start_sort_aggregates_overlapping_album_assets_into_one_job_entry(tmp_path):
@@ -180,6 +214,8 @@ def test_start_sort_aggregates_overlapping_album_assets_into_one_job_entry(tmp_p
     seed_raw_albums(service, album_one, album_two)
 
     result = service.start_sort(["album-2", "album-1"])
+    service.get_sort_progress(result["job_id"])
+    service.get_sort_progress(result["job_id"])
 
     shared_asset = next(
         asset
@@ -200,6 +236,42 @@ def test_start_sort_aggregates_overlapping_album_assets_into_one_job_entry(tmp_p
             "selection_order": 1,
         },
     ]
+
+
+def test_get_sort_progress_excludes_selected_assets_from_polling_payload(tmp_path):
+    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    album = FakeAlbum(
+        "album-1",
+        "Vacation 2025",
+        [FakeAsset(id="asset-1", filename="IMG_001.HEIC", media_type="image")],
+    )
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 1,
+                "is_system_album": False,
+            },
+        ],
+    )
+    seed_raw_albums(service, album)
+
+    result = service.start_sort(["album-1"])
+    service.get_sort_progress(result["job_id"])
+    progress = service.get_sort_progress(result["job_id"])
+
+    assert set(progress) == {
+        "job_id",
+        "status",
+        "processed",
+        "total",
+        "percent",
+        "message",
+    }
+    assert "selected_assets" not in progress
+    assert len(service.jobs[result["job_id"]]["selected_assets"]) == 1
 
 
 def test_get_sort_progress_returns_error_for_unknown_job():

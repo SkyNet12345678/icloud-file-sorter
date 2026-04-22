@@ -94,17 +94,23 @@ def test_api_get_sort_progress_delegates_to_albums_service(main_module):
     api.albums_service = MagicMock()
     api.albums_service.get_sort_progress.return_value = {
         "job_id": "job-123",
-        "status": "running",
-        "processed": 50,
-        "total": 1847,
-        "percent": 2,
-        "message": "Processing photo 50 of 1847",
+        "status": "matching",
+        "processed": 0,
+        "total": 0,
+        "percent": 0,
+        "message": "Preparing matching job...",
     }
 
     result = api.get_sort_progress("job-123")
 
-    assert result["status"] == "running"
-    assert result["processed"] == 50
+    assert result == {
+        "job_id": "job-123",
+        "status": "matching",
+        "processed": 0,
+        "total": 0,
+        "percent": 0,
+        "message": "Preparing matching job...",
+    }
     api.albums_service.get_sort_progress.assert_called_once_with("job-123")
 
 

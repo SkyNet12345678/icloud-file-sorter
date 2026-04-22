@@ -46,6 +46,14 @@ class TrackingPhotosService:
         return current_albums
 
 
+class FakeSettingsService:
+    def __init__(self, source_folder):
+        self.source_folder = source_folder
+
+    def get_source_folder(self):
+        return self.source_folder
+
+
 def build_service(album_sequences):
     photos = TrackingPhotosService(album_sequences)
     api = SimpleNamespace(photos=photos)
@@ -280,3 +288,53 @@ def test_get_assets_for_album_ids_dedupes_selection_and_preserves_membership_ord
     ]
     assert album_one.asset_request_count == 1
     assert album_two.asset_request_count == 1
+
+
+def test_start_sort_forces_fresh_asset_refresh_for_selected_albums_only(tmp_path):
+    album_one = FakeAlbum(
+        "album-1",
+        "Trips",
+        [
+            [FakeAsset(id="asset-1", filename="IMG_0001.HEIC", media_type="image")],
+            [FakeAsset(id="asset-2", filename="IMG_0002.HEIC", media_type="image")],
+        ],
+        item_count=1,
+    )
+    album_two = FakeAlbum(
+        "album-2",
+        "Favorites",
+        [[FakeAsset(id="asset-9", filename="IMG_1000.HEIC", media_type="image")]],
+        item_count=1,
+    )
+    service, _ = build_service([[album_one, album_two]])
+    service.settings_service = FakeSettingsService(tmp_path)
+    service.get_albums()
+
+    service.get_album_assets("album-1")
+    service.get_album_assets("album-2")
+
+    result = service.start_sort(["album-1"])
+    service.get_sort_progress(result["job_id"])
+    matching_progress = service.get_sort_progress(result["job_id"])
+
+    assert matching_progress["status"] == "matching"
+    assert matching_progress["total"] == 1
+    assert album_one.asset_request_count == 2
+    assert album_two.asset_request_count == 1
+    assert service.jobs[result["job_id"]]["selected_assets"] == [
+        {
+            "asset_id": "asset-2",
+            "filename": "IMG_0002.HEIC",
+            "original_filename": "IMG_0002.HEIC",
+            "created_at": None,
+            "size": None,
+            "media_type": "image",
+            "album_memberships": [
+                {
+                    "album_id": "album-1",
+                    "album_name": "Trips",
+                    "selection_order": 0,
+                }
+            ],
+        }
+    ]

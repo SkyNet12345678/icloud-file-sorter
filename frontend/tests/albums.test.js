@@ -212,4 +212,50 @@ describe("albums.js", () => {
     expect(document.getElementById("download-btn").hidden).toBe(false);
     expect(document.getElementById("cancel-btn").hidden).toBe(true);
   });
+
+  it("renders matching-stage progress from lightweight polling payloads", async () => {
+    const startSort = vi.fn().mockResolvedValue({ job_id: "job-1" });
+    const getSortProgress = vi.fn().mockResolvedValue({
+      job_id: "job-1",
+      status: "matching",
+      processed: 0,
+      total: 0,
+      percent: 0,
+      message: "Preparing matching job...",
+    });
+
+    globalThis.pywebview = {
+      api: {
+        start_sort: startSort,
+        get_sort_progress: getSortProgress,
+      },
+    };
+
+    let pollSortProgress;
+    const setIntervalMock = vi.fn((callback) => {
+      pollSortProgress = callback;
+      return 1;
+    });
+    const clearIntervalMock = vi.fn();
+    vi.stubGlobal("setInterval", setIntervalMock);
+    vi.stubGlobal("clearInterval", clearIntervalMock);
+
+    const albums = await import("../../app/ui/js/albums.js");
+    albums.showAlbums([
+      { id: "album-1", name: "Trips", item_count: 12, is_system_album: false },
+    ]);
+
+    document.querySelector('#albums-list input[data-album-id="album-1"]').checked = true;
+
+    await albums.startSort();
+    await pollSortProgress();
+
+    expect(getSortProgress).toHaveBeenCalledWith("job-1");
+    expect(document.getElementById("sort-progress-message").textContent).toBe(
+      "Preparing matching job...",
+    );
+    expect(document.getElementById("sort-progress-percent").textContent).toBe("0%");
+    expect(document.getElementById("download-btn").hidden).toBe(true);
+    expect(document.getElementById("cancel-btn").hidden).toBe(false);
+  });
 });
