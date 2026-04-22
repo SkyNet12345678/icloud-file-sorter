@@ -8,6 +8,7 @@ This detailed plan is aligned to `.planning/ICLOUD-SORTER-PLAN.md` as follows:
 - Expensive iCloud asset metadata fetch, local scanning, and matching happen only when sorting starts.
 - Matching uses the local iCloud Photos source folder, not a separate target directory.
 - Match quality and failure counts are exposed to the UI.
+- MVP automatic matching is filename-only because local iCloud placeholder metadata is not reliable enough for safe size/date fallback matching.
 - The temporary `Test Asset Fetch` button is removed by the end of this epic.
 
 This epic does not introduce new settings scope.
@@ -34,7 +35,7 @@ Epic 4 should reuse that baseline.
 - build a fast local filename index
 - match selected iCloud assets to local files
 - detect ambiguity explicitly
-- expose exact/fallback/not-found/ambiguous counts to progress UI
+- expose exact/not-found/ambiguous counts to progress UI
 - keep matching integrated with the current pywebview bridge and sort-progress polling
 
 ## Out Of Scope
@@ -211,46 +212,47 @@ Done when:
 
 ---
 
-## Phase 4: Fallback Matching & Match Quality Reporting
+## Phase 4: Filename-Only Matching Policy & Match Quality Reporting
 
 Goal:
 
-- improve match coverage for assets not resolved by filename alone and surface match quality clearly
+- lock Epic 4 to filename-only automatic matching for MVP and surface match quality clearly without introducing unsafe metadata fallbacks
 
 Deliverable:
 
-- unmatched assets can be resolved by size and created-at fallback and the UI shows exact vs fallback quality
+- the plan explicitly rejects size/date fallback matching for MVP and the UI-visible progress reports filename-only match quality
 
 Implementation:
 
-- add secondary matching for assets still marked `none`
-- compare file size and created-at with documented tolerance
-- keep fallback restricted to unmatched candidates to avoid overriding exact matches
-- preserve explicit `match_type` values: `exact`, `fallback`, `none`, `ambiguous`
+- document the filename-only matching policy for the default flat iCloud Photos source folder
+- document that local iCloud placeholder files do not provide reliable size/date metadata for automatic fallback matching
+- preserve explicit `match_type` values used by the current matcher: `exact`, `none`, `ambiguous`
 - include match summary in sort progress payloads and user-visible status text
+- if the backend continues exposing `fallback_matched` for bridge compatibility, keep it at `0` until a verified fallback strategy exists
 
-Fallback rule:
+Why metadata fallback is rejected for MVP:
 
-- same size within configured tolerance
-- created-at within plus or minus one day
+- local iCloud placeholder files can report placeholder-oriented filesystem metadata rather than trustworthy cloud asset metadata
+- local logical file size and timestamps are therefore not reliable enough to use as automatic matching keys
+- weak metadata heuristics would create false-positive matches, which is worse than surfacing `none` or `ambiguous`
 
 Tests:
 
-- fallback match success
-- fallback does not override an existing exact match
-- fallback remains `none` when metadata is insufficient
-- fallback remains `ambiguous` when more than one candidate satisfies the rule
 - progress payload includes `match_results`
+- unresolved assets remain `none` when no filename match exists
+- duplicate filename hits remain `ambiguous`
+- no new automatic fallback match type is introduced for MVP
 
 User verification:
 
-- run a sort where at least one asset requires fallback matching and verify fallback counts appear separately
-- confirm the progress text or completion text reports counts similar to `Matched: X | Fallback: Y | Not found: Z | Ambiguous: A`
+- run a sort where at least one asset has no filename hit and verify it is reported as not found instead of being force-matched by metadata
+- run a sort against a source tree with duplicate filenames and verify those assets are reported as ambiguous
+- confirm the progress text or completion text reports counts similar to `Exact: X | Not found: Z | Ambiguous: A`
 
 Done when:
 
-- fallback matching is implemented and covered by tests
-- UI-visible progress includes match quality counts
+- the plan and code path both treat filename-only matching as the only automatic matcher for MVP
+- UI-visible progress includes filename-only match quality counts
 
 ---
 

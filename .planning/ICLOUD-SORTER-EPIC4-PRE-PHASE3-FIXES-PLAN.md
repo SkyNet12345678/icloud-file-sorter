@@ -29,7 +29,7 @@ In scope:
 Out of scope:
 
 - implementing the local scanner itself
-- fallback matching rules
+- metadata-based fallback matching rules
 - changing the frontend bridge contract for `start_sort(selected_album_ids)`
 - removing the temporary debug fetch button unless separately scheduled
 

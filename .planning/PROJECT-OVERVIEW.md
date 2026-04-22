@@ -126,10 +126,12 @@ Default discovery options:
 - match by filename from iCloud metadata to local files
 - use case-insensitive matching on Windows
 
-### Fallbacks
+### MVP Matching Limits
 
-- compare file size when duplicate filenames exist
-- support related file pairs where practical, such as Live Photo sidecars or RAW+JPEG pairs
+- do not use local file size or local timestamps as automatic fallback match keys for MVP
+- iCloud for Windows may expose local placeholder files whose filesystem metadata is not reliable enough for safe automatic fallback matching
+- if a filename hit is missing, report the asset as unmatched rather than forcing a metadata-based guess
+- support related file pairs such as Live Photo sidecars or RAW+JPEG pairs only after there is a verified local matching strategy for them
 
 ### Expected Outcomes
 
@@ -155,6 +157,7 @@ Cloud-to-local file matching can take a long time, so it should not happen durin
 - the initial album fetch should retrieve only what the browser needs to render: album name and total item count
 - local filesystem scanning should begin only after the user starts sorting
 - matching should run inside the sort job lifecycle so progress reporting reflects the real work
+- MVP automatic matching should remain filename-only unless real local metadata proves reliable enough for a later revision
 - matched file state can then be written into JSON as part of the active sort run
 
 ## 8. JSON Persistence Plan
