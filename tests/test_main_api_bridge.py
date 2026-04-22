@@ -99,6 +99,12 @@ def test_api_get_sort_progress_delegates_to_albums_service(main_module):
         "total": 0,
         "percent": 0,
         "message": "Preparing matching job...",
+        "match_results": {
+            "matched": 0,
+            "fallback_matched": 0,
+            "not_found": 0,
+            "ambiguous": 0,
+        },
     }
 
     result = api.get_sort_progress("job-123")
@@ -110,6 +116,12 @@ def test_api_get_sort_progress_delegates_to_albums_service(main_module):
         "total": 0,
         "percent": 0,
         "message": "Preparing matching job...",
+        "match_results": {
+            "matched": 0,
+            "fallback_matched": 0,
+            "not_found": 0,
+            "ambiguous": 0,
+        },
     }
     api.albums_service.get_sort_progress.assert_called_once_with("job-123")
 
