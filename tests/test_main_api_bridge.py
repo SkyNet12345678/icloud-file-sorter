@@ -10,8 +10,14 @@ def main_module(monkeypatch):
     fake_webview = types.ModuleType("webview")
     fake_webview.create_window = MagicMock()
     fake_webview.start = MagicMock()
+    fake_pycloud = types.ModuleType("pyicloud")
+    fake_pycloud.PyiCloudService = MagicMock()
+    fake_pycloud_exceptions = types.ModuleType("pyicloud.exceptions")
+    fake_pycloud_exceptions.PyiCloudFailedLoginException = Exception
 
     monkeypatch.setitem(sys.modules, "webview", fake_webview)
+    monkeypatch.setitem(sys.modules, "pyicloud", fake_pycloud)
+    monkeypatch.setitem(sys.modules, "pyicloud.exceptions", fake_pycloud_exceptions)
     sys.modules.pop("app.main", None)
 
     module = importlib.import_module("app.main")
