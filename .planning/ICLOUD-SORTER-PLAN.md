@@ -14,7 +14,7 @@ Use the planning files like this:
 - keep the current HTML/CSS/vanilla JS frontend shape unless there is a clear need to change it
 - use JSON persistence, not SQLite
 - keep album browsing lightweight
-- perform expensive local file scanning and cloud-to-local matching only when sorting starts
+- perform expensive iCloud asset metadata fetch, local file scanning, and cloud-to-local matching only when sorting starts
 - sort inside the iCloud Photos folder for the current MVP direction
 - publish release artifacts to S3 and provide downloads through a simple website
 
@@ -71,15 +71,15 @@ Status: next major implementation epic
 Scope:
 
 - fetch album list via `pyicloud`
-- fetch per-asset metadata for selected albums
-- hold album and asset metadata in memory for the current session
-- preserve ordered album memberships for assets that appear in multiple selected albums
+- fetch album names and item counts for browsing
+- hold album summaries in memory for the current session
 - build the album browser UI around real data
 - keep album detail view optional unless it becomes necessary for debugging or support
 
 Important constraint:
 
 - album browsing must remain metadata-only and fast
+- do not fetch per-asset metadata during album loading or album browsing
 - do not trigger local filesystem matching during album loading
 
 ## Epic 4: Local File Scanning & Matching
@@ -89,6 +89,8 @@ Status: planned
 Scope:
 
 - remove the temporary "Test Asset Fetch" button added in Epic 3 Phase 5
+- fetch per-asset metadata from iCloud only after the user starts sorting selected albums
+- aggregate asset metadata across the selected albums and preserve ordered album memberships
 - scan the local iCloud Photos folder when the user starts sorting
 - build a fast filename index for the local folder
 - match by filename first, then use size and created-at style fallbacks when needed
@@ -99,7 +101,7 @@ Corrections applied to the CSV:
 
 - no database-backed `sorted_files` table
 - any incremental history should live in JSON state
-- matching happens inside the active sort job, not as a pre-sort preload step
+- iCloud asset metadata fetch and matching happen inside the active sort job, not as a pre-sort preload step
 
 ## Epic 5: Sorting Engine
 

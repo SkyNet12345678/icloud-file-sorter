@@ -1,221 +1,328 @@
 # Epic 4: Local File Scanning & Matching
 
-## Decisions Confirmed
+## Alignment To Higher Plan
 
-- **1A**: Auto-detect + manual override for source folder
-- **1B**: Remember last used path, auto-detect fallback if missing
-- **2A**: Size + created-at secondary matching
-- **3A**: Skip ambiguous to error count (iCloud for Windows guarantees unique filenames)
-- **4A**: JSON settings with schema version for source_folder persistence
-- **4B**: sorting_approach global setting: "first" (default) or "copy"
-- **4C**: Copy warning always visible when "copy" is selected
-- **5**: Match quality metrics confirmed
+This detailed plan is aligned to `.planning/ICLOUD-SORTER-PLAN.md` as follows:
 
-## Settings Schema (v1)
+- Epic 4 covers local scanning and cloud-to-local matching only.
+- Expensive iCloud asset metadata fetch, local scanning, and matching happen only when sorting starts.
+- Matching uses the local iCloud Photos source folder, not a separate target directory.
+- Match quality and failure counts are exposed to the UI.
+- The temporary `Test Asset Fetch` button is removed by the end of this epic.
 
-```json
-{
-  "schema_version": 1,
-  "source_folder": "C:\\Users\\...\\iCloud Photos",
-  "sorting_approach": "first"
-}
-```
+This epic does not introduce new settings scope.
 
-- `source_folder`: Remember last used, auto-detect fallback if missing
-- `sorting_approach`: "first" = move to first album folder, "copy" = copy to all albums
-- Copy warning: Always show when "copy" approach selected
-  > "Copy will download full-resolution files from iCloud before copying. This may take significant time and storage for large albums."
+- Source folder persistence and sort-behavior settings belong to Epic 6 at the higher-plan level.
+- In the current codebase, the settings baseline already exists and Epic 4 should consume it rather than redesign it.
 
-## Startup Validation
+## Existing Baseline
 
-- On app start: Check if saved source_folder exists → use it
-- If saved folder missing: Auto-detect and update settings
-- On sort start: Validate source_folder exists → error if missing
+These pieces already exist and should be treated as dependencies, not new Epic 4 work:
 
-## Auto-Detect Paths
+- `app/settings.py`
+- `API.get_settings()` / `API.save_settings()` / `API.detect_source_folder()` in `app/main.py`
+- settings UI in `app/ui/index.html` and `app/ui/js/settings.js`
 
-```
-Windows:
-- %USERPROFILE%\Pictures\iCloud Photos
-- %USERPROFILE%\Apple Cloud\Pictures (older)
-- Falls back to Pictures/iCloud Photos
-```
+Epic 4 should reuse that baseline.
+
+## In Scope
+
+- validate the configured source folder when a sort starts
+- fetch per-asset metadata from iCloud only after sort starts
+- aggregate selected album assets while preserving album membership order
+- scan the local source folder during the active sort job
+- build a fast local filename index
+- match selected iCloud assets to local files
+- detect ambiguity explicitly
+- expose exact/fallback/not-found/ambiguous counts to progress UI
+- keep matching integrated with the current pywebview bridge and sort-progress polling
+
+## Out Of Scope
+
+- new settings schema changes
+- startup prerequisite detection beyond what is already implemented elsewhere
+- a separate target directory setting
+- final file-moving/copying engine details beyond what is needed to hand matched files into Epic 5
+- database-backed history
+
+## Dependency Decisions
+
+- Epic 3 album summaries are a hard dependency.
+- Per-asset metadata fetch belongs to Epic 4 and must happen only inside the active sort job.
+- Matching must operate on the aggregated asset set from selected albums so shared assets are not double-counted.
+- Keep the UI bridge stable: `start_sort(selected_album_ids)` should remain the JS contract.
+- Pass settings into the sort path by dependency injection in Python, not by adding new frontend parameters to `start_sort()`.
+
+Recommended wiring:
+
+- `app/main.py`: construct `AlbumsService` with the existing `SettingsService`
+- `app/icloud/albums_service.py`: pass `SettingsService` into `ICloudService`
+- `app/icloud/icloud_service.py`: read `source_folder` and sort behavior from the injected settings service
+
+## Phase 1: Settings Baseline
+
+Status: already implemented
+
+Purpose:
+
+- establish the existing settings dependency used by this epic
+
+Already present:
+
+- JSON-backed settings service
+- source folder persistence and detection methods
+- sorting approach persistence
+- settings UI and copy warning
+
+Verification:
+
+- `pywebview.api.get_settings()` returns current settings
+- changing source folder or sorting approach in the UI persists through `save_settings()`
+- reloading settings restores the saved values
+
+Done when:
+
+- no additional Epic 4 work is required to create or redesign settings infrastructure
 
 ---
 
-## Phase 1: Settings Infrastructure
+## Phase 2: Sort-Time Asset Fetch & Folder Validation
 
-### Step 1.1: Create SettingsService
+Goal:
 
-- New file: `app/settings.py`
-- JSON persistence to `%APPDATA%/icloud-sorter/settings.json`
-- Schema v1: source_folder, sorting_approach
-- Load/save methods
-- Auto-detect on startup: validate saved path, fallback to auto-detect if missing
+- make the sort job validate the configured source folder and fetch selected album asset metadata from iCloud only after sort start
 
-### Step 1.2: Add source_folder to API bridge
+Deliverable:
 
-- Modified: `app/main.py`
-- Add `get_settings()`, `save_settings()`, `detect_source_folder()` to API
+- starting a sort transitions into a visible `matching` stage and fetches selected album asset metadata from iCloud without changing album-browsing behavior
 
-### Step 1.3: Copy approach warning UI
+Implementation:
 
-- New: `app/ui/js/settings.js`
-- Show current approach
-- Display warning when "copy" is selected
-- Allow approach toggle
+- validate `source_folder` exists and is a directory
+- in `ICloudService.start_sort()`, fetch asset metadata only for the selected album ids
+- aggregate assets across selected albums and preserve ordered `album_memberships`
+- add job status support for `matching`
+- return a clear user-facing error when the source folder is missing or not configured
 
----
-
-## Phase 2: Local Scanner
-
-### Step 2.1: Create LocalScanner class
-
-- New file: `app/scanner.py`
-- `LocalScanner` class with:
-  - `__init__(source_folder)`
-  - `scan()` - builds filename index
-  - `match_assets(assets)` - matches cloud assets to local files
-  - `get_index()` - returns current index
-
-### Step 2.2: Index structure
+Aggregated asset shape:
 
 ```python
 {
-  "IMG_1234.HEIC": [
-    {"path": "...", "size": 1234567, "created_at": "2025-01-15T10:30:00Z"},
-  ],
-  "IMG_1234.mp4": [...],
+  "asset_id": "...",
+  "filename": "IMG_1234.HEIC",
+  "original_filename": "IMG_1234.HEIC",
+  "created_at": "2025-01-15T10:30:00Z",
+  "size": 1234567,
+  "media_type": "image",
+  "album_memberships": [
+    {
+      "album_id": "album-1",
+      "album_name": "Vacation 2025",
+      "selection_order": 0,
+    }
+  ]
 }
 ```
 
-### Step 2.3: Folder validation
+Tests:
+- service test proving album browsing still returns only lightweight album summaries
+- service test that sort start fetches asset metadata for selected albums only
+- service test that overlapping albums produce one aggregated asset with multiple memberships
+- service test that `start_sort()` returns a clear error when `source_folder` is unavailable
 
-- Validate folder exists before scanning
-- Return clear error if missing
+User verification:
 
-### Step 2.4: Expose via service
+- browse albums without waiting for asset-level fetches
+- with a valid source folder configured, start a sort and see the job enter `matching`
+- with an invalid source folder configured, start a sort and see a clear error instead of a silent failure
 
-- Modified: `app/icloud/albums_service.py`
-- Add `LocalScanner` to service layer
+Done when:
+
+- sort start performs folder validation
+- iCloud asset metadata fetch happens only after sort start
+- progress polling can report `matching`
 
 ---
 
-## Phase 3: Matching Logic
+## Phase 3: Local Scan Integration, Exact Matching & Ambiguity Handling
 
-### Step 3.1: Filename-first matching
+Goal:
 
-- Exact filename match
-- Case-insensitive comparison
+- scan the local source folder and match selected assets to local files by filename first while detecting ambiguity explicitly
 
-### Step 3.2: Size + created-at fallback
+Deliverable:
 
-- Match if same size ± tolerance AND same date (±1 day)
-- Return match type: "exact" | "fallback" | "none"
+- the backend produces structured exact-match results for the aggregated selected assets
 
-### Step 3.3: Ambiguity detection
+Implementation:
 
-- Multiple files with same filename = report as "ambiguous" (rare per design note)
+- new file: `app/scanner.py`
+- create `LocalScanner(source_folder)`
+- build a case-insensitive filename index during `scan()`
+- add `LocalScanner.match_assets(assets)`
+- exact match by normalized filename first
+- if one local file matches, mark `match_type: "exact"`
+- if multiple local files match the same asset key, mark `match_type: "ambiguous"`
+- if no filename match exists, mark `match_type: "none"` for now
+- store match summary on the job state
 
-### Step 3.4: Match result structure
+Result shape:
 
 ```python
 {
   "matched": 1450,
-  "fallback_matched": 42,
+  "fallback_matched": 0,
   "not_found": 12,
-  "ambiguous": 0,
+  "ambiguous": 3,
   "assets": [
     {
       "asset_id": "...",
-      "filename": "...",
-      "local_path": "...",
-      "match_type": "exact|fallback|none",
-    },
-  ],
+      "filename": "IMG_1234.HEIC",
+      "local_path": "C:/Users/.../IMG_1234.HEIC",
+      "match_type": "exact",
+      "album_memberships": [...],
+    }
+  ]
 }
 ```
 
----
+Tests:
 
-## Phase 4: Integration into Sort Job
+- `tests/scanner/test_local_scanner.py`
+- `tests/scanner/test_matching.py`
+- index build from a temporary directory
+- case-insensitive filename normalization
+- exact match success
+- no-match result
+- ambiguous match result when duplicate filenames exist locally
+- service test proving multi-album assets are matched once from the aggregated asset set
 
-### Step 4.1: Update start_sort()
+User verification:
 
-- Modified: `app/icloud/icloud_service.py`
-- Call scanner to get match results before sorting
+- start a sort for an album with known local files and see match counts appear in progress or final status
+- select overlapping albums and verify shared assets are not counted twice
 
-### Step 4.2: Job state updates
+Done when:
 
-```python
-{
-  "job_id": "...",
-  "status": "matching|sorting|complete",
-  "match_results": {
-    "matched": 1450,
-    "fallback_matched": 42,
-    "not_found": 12,
-    "ambiguous": 0,
-  },
-  "sort_results": {...},
-}
-```
-
-### Step 4.3: Validate source folder
-
-- Check source_folder exists before sort starts
-- Return clear error if not configured
+- local scan happens only after sort-time asset fetch begins
+- filename-first matching works on aggregated asset metadata
+- ambiguity is counted separately from not-found
+- job state contains structured match results
 
 ---
 
-## Phase 5: UI Cleanup
+## Phase 4: Fallback Matching & Match Quality Reporting
 
-### Step 5.1: Wire test button to real API
+Goal:
 
-- Modified: `app/ui/index.html`
-- Keep `<button id="test-fetch-btn">` - wire to get_album_assets for debugging
+- improve match coverage for assets not resolved by filename alone and surface match quality clearly
 
-### Step 5.2: Keep testFetchAlbumAssets wired
+Deliverable:
 
-- Modified: `app/ui/js/albums.js`
-- Keep `testFetchAlbumAssets()` - useful for verifying album fetching
+- unmatched assets can be resolved by size and created-at fallback and the UI shows exact vs fallback quality
 
-### Step 5.3: Update progress display
+Implementation:
 
-- Add match quality counts to progress message
-- Example: "Matched: 1450 | Fallback: 42 | Not found: 12"
+- add secondary matching for assets still marked `none`
+- compare file size and created-at with documented tolerance
+- keep fallback restricted to unmatched candidates to avoid overriding exact matches
+- preserve explicit `match_type` values: `exact`, `fallback`, `none`, `ambiguous`
+- include match summary in sort progress payloads and user-visible status text
+
+Fallback rule:
+
+- same size within configured tolerance
+- created-at within plus or minus one day
+
+Tests:
+
+- fallback match success
+- fallback does not override an existing exact match
+- fallback remains `none` when metadata is insufficient
+- fallback remains `ambiguous` when more than one candidate satisfies the rule
+- progress payload includes `match_results`
+
+User verification:
+
+- run a sort where at least one asset requires fallback matching and verify fallback counts appear separately
+- confirm the progress text or completion text reports counts similar to `Matched: X | Fallback: Y | Not found: Z | Ambiguous: A`
+
+Done when:
+
+- fallback matching is implemented and covered by tests
+- UI-visible progress includes match quality counts
 
 ---
 
-## Phase 6: Tests
+## Phase 5: Sort-Path Handoff, Cleanup, And Regression Coverage
 
-### Test files to create
+Goal:
 
-- `tests/scanner/__init__.py`
-- `tests/scanner/test_local_scanner.py` - Index building, filename matching
-- `tests/scanner/test_matching.py` - Fallback matching, ambiguity
-- `tests/test_settings.py` - Load/save, auto-detect
+- finalize Epic 4 so the sort flow hands matched asset data cleanly into Epic 5 and remove temporary Epic 3 debugging UI
+
+Deliverable:
+
+- the sort path uses real match data as its handoff point and the temporary test button is gone
+
+Implementation:
+
+- ensure job state contains the matched asset list needed by the later sorting engine
+- keep current mock sorting behavior only as a downstream placeholder
+- remove `<button id="test-fetch-btn">` from `app/ui/index.html`
+- remove `testFetchAlbumAssets()` wiring from `app/ui/js/albums.js` and `app/ui/js/main.js`
+- update bridge/service tests affected by richer progress payloads and matching status
+
+Tests:
+
+- update `tests/test_main_api_bridge.py`
+- update `tests/test_sorting_services.py`
+- verify existing album metadata tests still pass
+- add regression coverage for `matching` status and `match_results` payload shape
+
+User verification:
+
+- log in, load albums, and confirm the temporary test button is no longer shown
+- start a sort and confirm the visible workflow is now selection -> matching -> sorting progress
+
+Done when:
+
+- temporary debug UI is removed
+- match data is retained in job state for Epic 5
+- regression tests cover the updated sort lifecycle
 
 ---
 
-## File Summary
+## File Plan
 
-### New files
-- `app/settings.py` - Settings persistence (schema v1)
-- `app/scanner.py` - Local scanner + matching
-- `app/ui/js/settings.js` - Settings UI (copy warning)
+### New file
+
+- `app/scanner.py` - local folder scan and asset matching logic
 
 ### Modified files
-- `app/main.py` - Add settings API
-- `app/icloud/icloud_service.py` - Integrate scanner
-- `app/icloud/albums_service.py` - Delegate scanner
-- `app/ui/index.html` - Keep test button wired
-- `app/ui/js/albums.js` - Keep test function wired, update progress
 
----
+- `app/main.py` - inject existing settings service into the album/sort path
+- `app/icloud/albums_service.py` - pass settings dependency into `ICloudService`
+- `app/icloud/icloud_service.py` - run scan, matching, and richer progress reporting
+- `app/ui/js/albums.js` - render matching progress and remove temporary debug fetch code by Phase 5
+- `app/ui/js/main.js` - remove temporary debug button wiring by Phase 5
+- `app/ui/index.html` - remove temporary debug button by Phase 5
+- `tests/test_main_api_bridge.py` - updated sort lifecycle expectations
+- `tests/test_sorting_services.py` - updated sort and matching expectations
+- `tests/scanner/test_local_scanner.py` - scanner coverage
+- `tests/scanner/test_matching.py` - matching coverage
+
+## Phase Acceptance Checklist
+
+For a phase to count as complete, it must satisfy all of the following:
+
+- the phase deliverable is visible either in the UI, in the API contract, or in automated tests
+- the named tests for that phase pass
+- the user can perform the verification steps listed for that phase without reading internal code
+- the next phase can build on the phase output without revisiting scope already marked complete
 
 ## Dependencies
 
-- **Epic 3** (Album metadata): Working ✓
-- **pathlib**: Already in `app/logger.py` ✓
-- **JSON**: Standard library ✓
+- Epic 3 album and asset metadata retrieval: required
+- existing settings baseline: required and already present
+- JSON persistence: already present
+- `pathlib`, `datetime`, `json`: standard library support available
