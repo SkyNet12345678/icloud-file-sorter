@@ -178,4 +178,38 @@ describe("albums.js", () => {
     expect(startSort).toHaveBeenCalledWith(["album-1"]);
     expect(setIntervalMock).toHaveBeenCalledTimes(1);
   });
+
+  it("shows a visible error when sort start validation fails", async () => {
+    const startSort = vi.fn().mockResolvedValue({
+      error: "Source folder is not configured. Choose your iCloud Photos folder in Settings before starting a sort.",
+    });
+
+    globalThis.pywebview = {
+      api: {
+        start_sort: startSort,
+        get_sort_progress: vi.fn(),
+      },
+    };
+
+    const albums = await import("../../app/ui/js/albums.js");
+    albums.showAlbums([
+      { id: "album-1", name: "Trips", item_count: 12, is_system_album: false },
+    ]);
+
+    document.querySelector('#albums-list input[data-album-id="album-1"]').checked = true;
+
+    await albums.startSort();
+
+    expect(startSort).toHaveBeenCalledWith(["album-1"]);
+    expect(document.getElementById("albums-status").textContent).toBe(
+      "Source folder is not configured. Choose your iCloud Photos folder in Settings before starting a sort.",
+    );
+    expect(document.getElementById("albums-status").hidden).toBe(false);
+    expect(document.getElementById("sort-progress-content").hidden).toBe(false);
+    expect(document.getElementById("sort-progress-message").textContent).toBe(
+      "Source folder is not configured. Choose your iCloud Photos folder in Settings before starting a sort.",
+    );
+    expect(document.getElementById("download-btn").hidden).toBe(false);
+    expect(document.getElementById("cancel-btn").hidden).toBe(true);
+  });
 });

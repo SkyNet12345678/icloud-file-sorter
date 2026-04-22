@@ -109,6 +109,7 @@ export async function startSort() {
   sortState = 'running';
   setSortControls(true);
   setCheckboxesDisabled(true);
+  updateAlbumsStatus('', false);
   setSortProgress({
     percent: 0,
     message: 'Starting sort...',
@@ -162,9 +163,13 @@ export async function startSort() {
     downloadButton.dataset.sorting = 'false';
     setSortControls(false);
     setCheckboxesDisabled(false);
-    sortState = 'idle';
-    showSelectionSummary();
-    updateSelection();
+    sortState = 'error';
+    updateAlbumsStatus(error.message || 'Failed to start sort.', true);
+    setSortProgress({
+      percent: 0,
+      message: error.message || 'Failed to start sort.',
+      status: 'error',
+    });
     console.error(error);
   }
 }
