@@ -195,7 +195,10 @@ def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
         "processed": 0,
         "total": DEFAULT_MOCK_SORT_TOTAL,
         "percent": 0,
-        "message": "Starting sort for 2 album(s). Exact: 1 | Fallback: 0 | Not found: 1 | Ambiguous: 0",
+        "message": (
+            "Starting sort for 2 album(s). "
+            "Filename-only matching: Exact: 1 | Not found: 1 | Ambiguous: 0"
+        ),
         "match_results": {
             "matched": 1,
             "fallback_matched": 0,
@@ -431,7 +434,10 @@ def test_get_sort_progress_advances_running_job():
     assert result["status"] == "running"
     assert result["processed"] == 50
     assert result["percent"] == 2
-    assert result["message"] == f"Processing photo 50 of {DEFAULT_MOCK_SORT_TOTAL}"
+    assert result["message"] == (
+        f"Processing photo 50 of {DEFAULT_MOCK_SORT_TOTAL}. "
+        "Filename-only matching: Exact: 0 | Not found: 0 | Ambiguous: 0"
+    )
     assert result["match_results"] == {
         "matched": 0,
         "fallback_matched": 0,
@@ -458,13 +464,63 @@ def test_get_sort_progress_marks_job_complete_when_total_is_reached():
     assert result["status"] == "complete"
     assert result["processed"] == DEFAULT_MOCK_SORT_TOTAL
     assert result["percent"] == 100
-    assert result["message"] == "Sort complete"
+    assert result["message"] == (
+        "Sort complete. Filename-only matching: Exact: 0 | Not found: 0 | Ambiguous: 0"
+    )
     assert result["match_results"] == {
         "matched": 0,
         "fallback_matched": 0,
         "not_found": 0,
         "ambiguous": 0,
     }
+
+
+def test_running_progress_message_keeps_filename_only_match_quality_visible(tmp_path):
+    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    (tmp_path / "IMG_001.HEIC").write_text("asset-1", encoding="utf-8")
+    duplicate_dir = tmp_path / "duplicates"
+    duplicate_dir.mkdir()
+    (duplicate_dir / "IMG_002.HEIC").write_text("a", encoding="utf-8")
+    second_duplicate_dir = tmp_path / "duplicates-2"
+    second_duplicate_dir.mkdir()
+    (second_duplicate_dir / "img_002.heic").write_text("b", encoding="utf-8")
+    album = FakeAlbum(
+        "album-1",
+        "Vacation 2025",
+        [
+            FakeAsset(id="asset-1", filename="IMG_001.HEIC", media_type="image"),
+            FakeAsset(id="asset-2", filename="IMG_002.HEIC", media_type="image"),
+            FakeAsset(id="asset-3", filename="IMG_404.HEIC", media_type="image"),
+        ],
+    )
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 3,
+                "is_system_album": False,
+            },
+        ],
+    )
+    seed_raw_albums(service, album)
+
+    result = service.start_sort(["album-1"])
+    service.get_sort_progress(result["job_id"])
+    service.get_sort_progress(result["job_id"])
+
+    running_progress = service.get_sort_progress(result["job_id"])
+
+    assert running_progress["message"] == (
+        "Starting sort for 1 album(s). "
+        "Filename-only matching: Exact: 1 | Not found: 1 | Ambiguous: 1"
+    )
+    follow_up_progress = service.get_sort_progress(result["job_id"])
+    assert follow_up_progress["message"] == (
+        f"Processing photo 50 of {DEFAULT_MOCK_SORT_TOTAL}. "
+        "Filename-only matching: Exact: 1 | Not found: 1 | Ambiguous: 1"
+    )
 
 
 def test_start_sort_returns_error_when_album_cache_is_cold():

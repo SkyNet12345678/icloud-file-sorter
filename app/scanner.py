@@ -1,3 +1,11 @@
+"""Local filename scanning and matching for the MVP sort flow.
+
+Automatic matching is intentionally filename-only. iCloud for Windows can expose
+placeholder-oriented local metadata, so local size and timestamp values are not
+reliable enough for safe fallback matching. Unresolved assets stay as
+``none`` or ``ambiguous`` instead of being guessed from weak heuristics.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -46,6 +54,7 @@ class LocalScanner:
 
         match_results = {
             "matched": 0,
+            # Kept for bridge compatibility until a verified fallback strategy exists.
             "fallback_matched": 0,
             "not_found": 0,
             "ambiguous": 0,

@@ -95,12 +95,12 @@ class ICloudService:
         if job["status"] == "running":
             job["processed"] = min(job["processed"] + 50, job["total"])
             job["percent"] = int((job["processed"] / job["total"]) * 100) if job["total"] else 100
-            job["message"] = f'Processing photo {job["processed"]} of {job["total"]}'
+            job["message"] = self._build_processing_message(job)
 
             if job["processed"] >= job["total"]:
                 job["status"] = "complete"
                 job["percent"] = 100
-                job["message"] = "Sort complete"
+                job["message"] = self._build_complete_message(job)
 
         return self._copy_job_progress(job)
 
@@ -712,15 +712,13 @@ class ICloudService:
         match_results = self._copy_match_results_summary(job.get("match_results"))
         return (
             f"Starting sort for {len(job['selected_album_ids'])} album(s). "
-            f"Exact: {match_results['matched']} | "
-            f"Fallback: {match_results['fallback_matched']} | "
-            f"Not found: {match_results['not_found']} | "
-            f"Ambiguous: {match_results['ambiguous']}"
+            f"{self._build_match_quality_message(match_results)}"
         )
 
     def _empty_match_results(self):
         return {
             "matched": 0,
+            # Kept for bridge compatibility until a verified fallback strategy exists.
             "fallback_matched": 0,
             "not_found": 0,
             "ambiguous": 0,
@@ -737,6 +735,25 @@ class ICloudService:
                     summary[key] = 0
         summary.pop("assets")
         return summary
+
+    def _build_processing_message(self, job):
+        match_results = self._copy_match_results_summary(job.get("match_results"))
+        return (
+            f"Processing photo {job['processed']} of {job['total']}. "
+            f"{self._build_match_quality_message(match_results)}"
+        )
+
+    def _build_complete_message(self, job):
+        match_results = self._copy_match_results_summary(job.get("match_results"))
+        return f"Sort complete. {self._build_match_quality_message(match_results)}"
+
+    def _build_match_quality_message(self, match_results):
+        return (
+            "Filename-only matching: "
+            f"Exact: {match_results['matched']} | "
+            f"Not found: {match_results['not_found']} | "
+            f"Ambiguous: {match_results['ambiguous']}"
+        )
 
     def _require_source_folder(self):
         source_folder = None
