@@ -27,3 +27,7 @@ package-dir = {"" = "."}
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".tmp_pytest", "tmp_pytest", ".pytest_cache", "venv", "node_modules"]
