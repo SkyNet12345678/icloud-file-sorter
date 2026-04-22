@@ -577,17 +577,36 @@ class ICloudService:
         return None
 
     def _read_field_value(self, raw_asset, field_name):
-        if hasattr(raw_asset, field_name):
-            value = getattr(raw_asset, field_name)
-            if callable(value):
-                try:
-                    value = value()
-                except TypeError:
-                    return None
-            return value
-
         if isinstance(raw_asset, dict):
             return raw_asset.get(field_name)
+
+        try:
+            value = getattr(raw_asset, field_name)
+        except AttributeError:
+            return None
+        except Exception as exc:
+            logger.warning(
+                "Skipping unreadable asset field %s on %s: %s",
+                field_name,
+                type(raw_asset).__name__,
+                exc,
+            )
+            return None
+
+        if callable(value):
+            try:
+                value = value()
+            except TypeError:
+                return None
+            except Exception as exc:
+                logger.warning(
+                    "Skipping unreadable callable asset field %s on %s: %s",
+                    field_name,
+                    type(raw_asset).__name__,
+                    exc,
+                )
+                return None
+        return value
 
         return None
 

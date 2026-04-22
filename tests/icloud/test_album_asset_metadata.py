@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import binascii
 
 from app.icloud.icloud_service import ICloudService
 
@@ -15,6 +16,16 @@ class FakeAsset:
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+
+class BrokenFilenameAsset:
+    id = "asset-broken"
+    name = "IMG_FALLBACK.HEIC"
+    media_type = "image"
+
+    @property
+    def filename(self):
+        raise binascii.Error("Incorrect padding")
 
 
 def test_normalize_asset_metadata_returns_backend_shape():
@@ -91,3 +102,20 @@ def test_normalize_asset_metadata_skips_assets_without_stable_id():
     result = service._normalize_asset_metadata(raw_asset, ALBUM_SUMMARY)
 
     assert result is None
+
+
+def test_normalize_asset_metadata_uses_fallback_when_filename_property_raises():
+    service = ICloudService(api=None)
+
+    result = service._normalize_asset_metadata(BrokenFilenameAsset(), ALBUM_SUMMARY)
+
+    assert result == {
+        "asset_id": "asset-broken",
+        "filename": "IMG_FALLBACK.HEIC",
+        "original_filename": "IMG_FALLBACK.HEIC",
+        "created_at": None,
+        "size": None,
+        "media_type": "image",
+        "album_id": "album-1",
+        "album_name": "Vacation 2025",
+    }

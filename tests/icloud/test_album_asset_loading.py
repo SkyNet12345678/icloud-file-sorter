@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import binascii
 
 from app.icloud.icloud_service import ICloudService
 
@@ -7,6 +8,17 @@ class FakeAsset:
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+
+class BrokenFilenameAsset:
+    def __init__(self, asset_id, fallback_name, media_type="image"):
+        self.id = asset_id
+        self.name = fallback_name
+        self.media_type = media_type
+
+    @property
+    def filename(self):
+        raise binascii.Error("Incorrect padding")
 
 
 class FakeAlbum:
@@ -374,3 +386,39 @@ def test_start_sort_forces_fresh_asset_refresh_for_selected_albums_only(tmp_path
             "match_type": "exact",
         }
     ]
+
+
+def test_get_assets_for_album_ids_tolerates_unreadable_filename_property():
+    album = FakeAlbum(
+        "album-1",
+        "Trips",
+        [[BrokenFilenameAsset("asset-1", "IMG_FALLBACK.HEIC")]],
+        item_count=1,
+    )
+    service, _ = build_service([[album]])
+    service.get_albums()
+
+    result = service.get_assets_for_album_ids(["album-1"])
+
+    assert result == {
+        "success": True,
+        "selected_album_ids": ["album-1"],
+        "assets": [
+            {
+                "asset_id": "asset-1",
+                "filename": "IMG_FALLBACK.HEIC",
+                "original_filename": "IMG_FALLBACK.HEIC",
+                "created_at": None,
+                "size": None,
+                "media_type": "image",
+                "album_memberships": [
+                    {
+                        "album_id": "album-1",
+                        "album_name": "Trips",
+                        "selection_order": 0,
+                    }
+                ],
+            }
+        ],
+        "error": None,
+    }
