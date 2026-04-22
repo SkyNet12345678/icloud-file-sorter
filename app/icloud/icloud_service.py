@@ -52,26 +52,22 @@ class ICloudService:
         except RuntimeError as exc:
             return {"error": str(exc)}
 
-        asset_result = self.get_assets_for_album_ids(selected_ids)
-        if not asset_result.get("success"):
-            return {"error": asset_result.get("error") or "Failed to load album assets"}
-
         selected_albums = self._resolve_selected_album_names(selected_ids)
-        selected_assets = asset_result["assets"]
 
         job_id = str(uuid.uuid4())
         self.jobs[job_id] = {
             "job_id": job_id,
             "status": "matching",
             "processed": 0,
-            "total": len(selected_assets),
+            "total": 0,
             "percent": 0,
             "selected_album_ids": selected_ids,
             "selected_albums": selected_albums,
-            "selected_assets": selected_assets,
+            "selected_assets": [],
             "source_folder": source_folder,
-            "message": self._build_matching_message(selected_assets),
+            "message": self._build_preparing_message(),
             "_matching_reported": False,
+            "_matching_prepared": False,
         }
 
         return {"job_id": job_id}
@@ -90,17 +86,7 @@ class ICloudService:
             }
 
         if job["status"] == "matching":
-            if not job.get("_matching_reported"):
-                progress = self._copy_job_progress(job)
-                job["_matching_reported"] = True
-                return progress
-
-            job["status"] = "running"
-            job["processed"] = 0
-            job["total"] = DEFAULT_MOCK_SORT_TOTAL
-            job["percent"] = 0
-            job["message"] = f"Starting sort for {len(job['selected_album_ids'])} album(s)..."
-            return self._copy_job_progress(job)
+            return self._advance_matching_job(job)
 
         if job["status"] == "running":
             job["processed"] = min(job["processed"] + 50, job["total"])
@@ -643,28 +629,60 @@ class ICloudService:
         }
 
     def _copy_job_progress(self, job):
-        copied_job = {}
+        progress_keys = (
+            "job_id",
+            "status",
+            "processed",
+            "total",
+            "percent",
+            "message",
+        )
+        return {
+            key: job[key]
+            for key in progress_keys
+        }
 
-        for key, value in job.items():
-            if key.startswith("_"):
-                continue
-            if key == "selected_assets":
-                copied_job[key] = [
-                    self._copy_aggregated_asset(asset)
-                    for asset in value
-                ]
-                continue
-            if isinstance(value, list):
-                copied_job[key] = list(value)
-                continue
-            copied_job[key] = value
+    def _advance_matching_job(self, job):
+        if not job.get("_matching_reported"):
+            job["_matching_reported"] = True
+            return self._copy_job_progress(job)
 
-        return copied_job
+        if not job.get("_matching_prepared"):
+            asset_result = self.get_assets_for_album_ids(
+                job["selected_album_ids"],
+                force_refresh=True,
+            )
+            if not asset_result.get("success"):
+                job["status"] = "error"
+                job["processed"] = 0
+                job["total"] = 0
+                job["percent"] = 0
+                job["message"] = asset_result.get("error") or "Failed to load album assets"
+                return self._copy_job_progress(job)
+
+            selected_assets = asset_result["assets"]
+            job["selected_assets"] = selected_assets
+            job["processed"] = 0
+            job["total"] = len(selected_assets)
+            job["percent"] = 0
+            job["message"] = self._build_matching_message(selected_assets)
+            job["_matching_prepared"] = True
+            return self._copy_job_progress(job)
+
+        job["status"] = "running"
+        job["processed"] = 0
+        job["total"] = DEFAULT_MOCK_SORT_TOTAL
+        job["percent"] = 0
+        job["message"] = f"Starting sort for {len(job['selected_album_ids'])} album(s)..."
+        return self._copy_job_progress(job)
 
     def _build_matching_message(self, selected_assets):
         asset_count = len(selected_assets)
         suffix = "asset" if asset_count == 1 else "assets"
         return f"Fetched iCloud metadata for {asset_count} {suffix}. Matching local files..."
+
+    def _build_preparing_message(self):
+        return "Preparing matching job..."
 
     def _require_source_folder(self):
         source_folder = None

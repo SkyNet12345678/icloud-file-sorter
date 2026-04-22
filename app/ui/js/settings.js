@@ -1,8 +1,23 @@
 let currentSettings = {};
 
+async function getPywebviewApi() {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    if (window.pywebview?.api) {
+      return window.pywebview.api;
+    }
+
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 50);
+    });
+  }
+
+  throw new Error("pywebview API not ready");
+}
+
 export async function loadSettings() {
   try {
-    const result = await window.pywebview.api.get_settings();
+    const api = await getPywebviewApi();
+    const result = await api.get_settings();
     if (result.success) {
       currentSettings = result.settings || {};
       updateSettingsUI(result.source_folder, result.sorting_approach);
@@ -32,7 +47,8 @@ function updateSettingsUI(sourceFolder, sortingApproach) {
 
 export async function saveSettings(sourceFolder, sortingApproach) {
   try {
-    const result = await window.pywebview.api.save_settings(
+    const api = await getPywebviewApi();
+    const result = await api.save_settings(
       sourceFolder,
       sortingApproach
     );
@@ -48,7 +64,8 @@ export async function saveSettings(sourceFolder, sortingApproach) {
 
 export async function detectSourceFolder() {
   try {
-    const result = await window.pywebview.api.detect_source_folder();
+    const api = await getPywebviewApi();
+    const result = await api.detect_source_folder();
     if (result.success) {
       return result.source_folder;
     }
