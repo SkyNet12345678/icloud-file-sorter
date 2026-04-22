@@ -1,5 +1,39 @@
+from pathlib import Path
+from types import SimpleNamespace
+
 from app.icloud.albums_service import AlbumsService
 from app.icloud.icloud_service import DEFAULT_MOCK_SORT_TOTAL, ICloudService
+
+
+class FakeSettingsService:
+    def __init__(self, source_folder):
+        self.source_folder = source_folder
+
+    def get_source_folder(self):
+        return self.source_folder
+
+
+class FakeAsset:
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
+class FakeAlbum:
+    def __init__(self, album_id, name, assets):
+        self.id = album_id
+        self.name = name
+        self.fullname = name
+        self._assets = list(assets)
+        self.asset_request_count = 0
+
+    def __len__(self):
+        return len(self._assets)
+
+    @property
+    def assets(self):
+        self.asset_request_count += 1
+        return list(self._assets)
 
 
 def seed_album_cache(service, albums):
@@ -15,38 +49,229 @@ def seed_album_cache(service, albums):
     }
 
 
-def test_start_sort_creates_job_and_filters_selected_albums():
-    service = ICloudService(api=None)
+def seed_raw_albums(service, *raw_albums):
+    service.raw_albums_by_id = {
+        album.id: album
+        for album in raw_albums
+    }
+
+
+def test_get_albums_keeps_album_browsing_lightweight():
+    album = FakeAlbum(
+        "album-1",
+        "Vacation 2025",
+        [FakeAsset(id="asset-1", filename="IMG_001.HEIC", media_type="image")],
+    )
+    service = ICloudService(api=SimpleNamespace(photos=SimpleNamespace(albums=[album])))
+
+    result = service.get_albums()
+
+    assert result["success"] is True
+    assert result["albums"] == [
+        {
+            "id": "album-1",
+            "name": "Vacation 2025",
+            "item_count": 1,
+            "is_system_album": False,
+        }
+    ]
+    assert album.asset_request_count == 0
+
+
+def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
+    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    album_one = FakeAlbum(
+        "album-1",
+        "Vacation 2025",
+        [FakeAsset(id="asset-1", filename="IMG_001.HEIC", media_type="image")],
+    )
+    album_two = FakeAlbum(
+        "album-2",
+        "Screenshots",
+        [FakeAsset(id="asset-2", filename="IMG_002.HEIC", media_type="image")],
+    )
+    album_three = FakeAlbum(
+        "album-3",
+        "Unselected",
+        [FakeAsset(id="asset-3", filename="IMG_003.HEIC", media_type="image")],
+    )
     seed_album_cache(
         service,
         [
             {
                 "id": "album-1",
                 "name": "Vacation 2025",
-                "item_count": 156,
+                "item_count": 1,
                 "is_system_album": False,
             },
             {
                 "id": "album-2",
                 "name": "Screenshots",
-                "item_count": 89,
+                "item_count": 1,
+                "is_system_album": False,
+            },
+            {
+                "id": "album-3",
+                "name": "Unselected",
+                "item_count": 1,
                 "is_system_album": False,
             },
         ],
     )
+    seed_raw_albums(service, album_one, album_two, album_three)
 
     result = service.start_sort(["album-1", "album-2", "album-1", None, "missing"])
 
     assert "job_id" in result
 
     job = service.jobs[result["job_id"]]
-    assert job["status"] == "running"
+    assert job["status"] == "matching"
     assert job["processed"] == 0
-    assert job["total"] == DEFAULT_MOCK_SORT_TOTAL
+    assert job["total"] == 0
     assert job["percent"] == 0
     assert job["selected_album_ids"] == ["album-1", "album-2"]
     assert job["selected_albums"] == ["Vacation 2025", "Screenshots"]
-    assert job["message"] == "Starting sort for 2 album(s)..."
+    assert job["source_folder"] == str(tmp_path)
+    assert job["selected_assets"] == []
+    assert job["message"] == "Preparing matching job..."
+    assert album_one.asset_request_count == 0
+    assert album_two.asset_request_count == 0
+    assert album_three.asset_request_count == 0
+
+    initial_matching_progress = service.get_sort_progress(result["job_id"])
+
+    assert initial_matching_progress == {
+        "job_id": result["job_id"],
+        "status": "matching",
+        "processed": 0,
+        "total": 0,
+        "percent": 0,
+        "message": "Preparing matching job...",
+    }
+    assert album_one.asset_request_count == 0
+    assert album_two.asset_request_count == 0
+    assert album_three.asset_request_count == 0
+
+    prepared_matching_progress = service.get_sort_progress(result["job_id"])
+
+    assert prepared_matching_progress == {
+        "job_id": result["job_id"],
+        "status": "matching",
+        "processed": 0,
+        "total": 2,
+        "percent": 0,
+        "message": "Fetched iCloud metadata for 2 assets. Matching local files...",
+    }
+    assert len(service.jobs[result["job_id"]]["selected_assets"]) == 2
+    assert album_one.asset_request_count == 1
+    assert album_two.asset_request_count == 1
+    assert album_three.asset_request_count == 0
+
+    running_progress = service.get_sort_progress(result["job_id"])
+
+    assert running_progress == {
+        "job_id": result["job_id"],
+        "status": "running",
+        "processed": 0,
+        "total": DEFAULT_MOCK_SORT_TOTAL,
+        "percent": 0,
+        "message": "Starting sort for 2 album(s)...",
+    }
+
+
+def test_start_sort_aggregates_overlapping_album_assets_into_one_job_entry(tmp_path):
+    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    album_one = FakeAlbum(
+        "album-1",
+        "Trips",
+        [FakeAsset(id="shared-1", filename="IMG_SHARED.HEIC", media_type="image")],
+    )
+    album_two = FakeAlbum(
+        "album-2",
+        "Favorites",
+        [
+            FakeAsset(id="shared-1", filename="IMG_SHARED.HEIC", media_type="image"),
+            FakeAsset(id="asset-2", filename="IMG_0002.HEIC", media_type="image"),
+        ],
+    )
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Trips",
+                "item_count": 1,
+                "is_system_album": False,
+            },
+            {
+                "id": "album-2",
+                "name": "Favorites",
+                "item_count": 2,
+                "is_system_album": False,
+            },
+        ],
+    )
+    seed_raw_albums(service, album_one, album_two)
+
+    result = service.start_sort(["album-2", "album-1"])
+    service.get_sort_progress(result["job_id"])
+    service.get_sort_progress(result["job_id"])
+
+    shared_asset = next(
+        asset
+        for asset in service.jobs[result["job_id"]]["selected_assets"]
+        if asset["asset_id"] == "shared-1"
+    )
+
+    assert len(service.jobs[result["job_id"]]["selected_assets"]) == 2
+    assert shared_asset["album_memberships"] == [
+        {
+            "album_id": "album-2",
+            "album_name": "Favorites",
+            "selection_order": 0,
+        },
+        {
+            "album_id": "album-1",
+            "album_name": "Trips",
+            "selection_order": 1,
+        },
+    ]
+
+
+def test_get_sort_progress_excludes_selected_assets_from_polling_payload(tmp_path):
+    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    album = FakeAlbum(
+        "album-1",
+        "Vacation 2025",
+        [FakeAsset(id="asset-1", filename="IMG_001.HEIC", media_type="image")],
+    )
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 1,
+                "is_system_album": False,
+            },
+        ],
+    )
+    seed_raw_albums(service, album)
+
+    result = service.start_sort(["album-1"])
+    service.get_sort_progress(result["job_id"])
+    progress = service.get_sort_progress(result["job_id"])
+
+    assert set(progress) == {
+        "job_id",
+        "status",
+        "processed",
+        "total",
+        "percent",
+        "message",
+    }
+    assert "selected_assets" not in progress
+    assert len(service.jobs[result["job_id"]]["selected_assets"]) == 1
 
 
 def test_get_sort_progress_returns_error_for_unknown_job():
@@ -66,18 +291,16 @@ def test_get_sort_progress_returns_error_for_unknown_job():
 
 def test_get_sort_progress_advances_running_job():
     service = ICloudService(api=None)
-    seed_album_cache(
-        service,
-        [
-            {
-                "id": "album-1",
-                "name": "Vacation 2025",
-                "item_count": 156,
-                "is_system_album": False,
-            }
-        ],
-    )
-    job_id = service.start_sort(["album-1"])["job_id"]
+    job_id = "job-1"
+    service.jobs[job_id] = {
+        "job_id": job_id,
+        "status": "running",
+        "processed": 0,
+        "total": DEFAULT_MOCK_SORT_TOTAL,
+        "percent": 0,
+        "selected_albums": ["Vacation 2025"],
+        "message": "Starting sort for 1 album(s)...",
+    }
 
     result = service.get_sort_progress(job_id)
 
@@ -193,7 +416,7 @@ def test_albums_service_get_album_assets_returns_error_without_icloud():
 
 
 def test_start_sort_returns_error_when_no_albums_selected():
-    service = ICloudService(api=None)
+    service = ICloudService(api=None, settings_service=FakeSettingsService(Path.cwd()))
     seed_album_cache(
         service,
         [
@@ -209,3 +432,47 @@ def test_start_sort_returns_error_when_no_albums_selected():
     result = service.start_sort([])
 
     assert result == {"error": "No albums selected"}
+
+
+def test_start_sort_returns_clear_error_when_source_folder_is_not_configured():
+    service = ICloudService(api=None, settings_service=FakeSettingsService(None))
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 156,
+                "is_system_album": False,
+            },
+        ],
+    )
+
+    result = service.start_sort(["album-1"])
+
+    assert result == {
+        "error": "Source folder is not configured. Choose your iCloud Photos folder in Settings before starting a sort."
+    }
+
+
+def test_start_sort_returns_clear_error_when_source_folder_is_not_a_directory(tmp_path):
+    source_file = tmp_path / "icloud-photos.txt"
+    source_file.write_text("not a folder", encoding="utf-8")
+    service = ICloudService(api=None, settings_service=FakeSettingsService(source_file))
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 156,
+                "is_system_album": False,
+            },
+        ],
+    )
+
+    result = service.start_sort(["album-1"])
+
+    assert result == {
+        "error": "Configured source folder is not a folder. Update the source folder in Settings before starting a sort."
+    }

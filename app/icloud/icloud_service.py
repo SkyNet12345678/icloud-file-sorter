@@ -1,6 +1,7 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 logger = logging.getLogger("icloud-sorter")
 
@@ -12,8 +13,9 @@ def _album_type_name(album):
 
 
 class ICloudService:
-    def __init__(self, api):
+    def __init__(self, api, settings_service=None):
         self.api = api
+        self.settings_service = settings_service
         self.jobs = {}
         self.album_cache_loaded = False
         self.album_list_cache = []
@@ -45,18 +47,27 @@ class ICloudService:
         if not selected_ids:
             return {"error": "No albums selected"}
 
+        try:
+            source_folder = self._require_source_folder()
+        except RuntimeError as exc:
+            return {"error": str(exc)}
+
         selected_albums = self._resolve_selected_album_names(selected_ids)
 
         job_id = str(uuid.uuid4())
         self.jobs[job_id] = {
             "job_id": job_id,
-            "status": "running",
+            "status": "matching",
             "processed": 0,
-            "total": DEFAULT_MOCK_SORT_TOTAL,
+            "total": 0,
             "percent": 0,
             "selected_album_ids": selected_ids,
             "selected_albums": selected_albums,
-            "message": f"Starting sort for {len(selected_ids)} album(s)...",
+            "selected_assets": [],
+            "source_folder": source_folder,
+            "message": self._build_preparing_message(),
+            "_matching_reported": False,
+            "_matching_prepared": False,
         }
 
         return {"job_id": job_id}
@@ -74,6 +85,9 @@ class ICloudService:
                 "message": "Unknown job id",
             }
 
+        if job["status"] == "matching":
+            return self._advance_matching_job(job)
+
         if job["status"] == "running":
             job["processed"] = min(job["processed"] + 50, job["total"])
             job["percent"] = int((job["processed"] / job["total"]) * 100) if job["total"] else 100
@@ -84,7 +98,7 @@ class ICloudService:
                 job["percent"] = 100
                 job["message"] = "Sort complete"
 
-        return job
+        return self._copy_job_progress(job)
 
     def get_cached_album(self, album_id):
         self._require_album_cache_loaded()
@@ -613,6 +627,84 @@ class ICloudService:
                 for membership in asset["album_memberships"]
             ],
         }
+
+    def _copy_job_progress(self, job):
+        progress_keys = (
+            "job_id",
+            "status",
+            "processed",
+            "total",
+            "percent",
+            "message",
+        )
+        return {
+            key: job[key]
+            for key in progress_keys
+        }
+
+    def _advance_matching_job(self, job):
+        if not job.get("_matching_reported"):
+            job["_matching_reported"] = True
+            return self._copy_job_progress(job)
+
+        if not job.get("_matching_prepared"):
+            asset_result = self.get_assets_for_album_ids(
+                job["selected_album_ids"],
+                force_refresh=True,
+            )
+            if not asset_result.get("success"):
+                job["status"] = "error"
+                job["processed"] = 0
+                job["total"] = 0
+                job["percent"] = 0
+                job["message"] = asset_result.get("error") or "Failed to load album assets"
+                return self._copy_job_progress(job)
+
+            selected_assets = asset_result["assets"]
+            job["selected_assets"] = selected_assets
+            job["processed"] = 0
+            job["total"] = len(selected_assets)
+            job["percent"] = 0
+            job["message"] = self._build_matching_message(selected_assets)
+            job["_matching_prepared"] = True
+            return self._copy_job_progress(job)
+
+        job["status"] = "running"
+        job["processed"] = 0
+        job["total"] = DEFAULT_MOCK_SORT_TOTAL
+        job["percent"] = 0
+        job["message"] = f"Starting sort for {len(job['selected_album_ids'])} album(s)..."
+        return self._copy_job_progress(job)
+
+    def _build_matching_message(self, selected_assets):
+        asset_count = len(selected_assets)
+        suffix = "asset" if asset_count == 1 else "assets"
+        return f"Fetched iCloud metadata for {asset_count} {suffix}. Matching local files..."
+
+    def _build_preparing_message(self):
+        return "Preparing matching job..."
+
+    def _require_source_folder(self):
+        source_folder = None
+        if self.settings_service is not None:
+            source_folder = self.settings_service.get_source_folder()
+
+        if not source_folder:
+            raise RuntimeError(
+                "Source folder is not configured. Choose your iCloud Photos folder in Settings before starting a sort."
+            )
+
+        source_path = Path(source_folder)
+        if not source_path.exists():
+            raise RuntimeError(
+                "Configured source folder was not found. Update the source folder in Settings before starting a sort."
+            )
+        if not source_path.is_dir():
+            raise RuntimeError(
+                "Configured source folder is not a folder. Update the source folder in Settings before starting a sort."
+            )
+
+        return str(source_path)
 
     def _success_result(self, albums):
         return {

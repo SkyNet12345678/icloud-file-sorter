@@ -10,8 +10,14 @@ def main_module(monkeypatch):
     fake_webview = types.ModuleType("webview")
     fake_webview.create_window = MagicMock()
     fake_webview.start = MagicMock()
+    fake_pycloud = types.ModuleType("pyicloud")
+    fake_pycloud.PyiCloudService = MagicMock()
+    fake_pycloud_exceptions = types.ModuleType("pyicloud.exceptions")
+    fake_pycloud_exceptions.PyiCloudFailedLoginException = Exception
 
     monkeypatch.setitem(sys.modules, "webview", fake_webview)
+    monkeypatch.setitem(sys.modules, "pyicloud", fake_pycloud)
+    monkeypatch.setitem(sys.modules, "pyicloud.exceptions", fake_pycloud_exceptions)
     sys.modules.pop("app.main", None)
 
     module = importlib.import_module("app.main")
@@ -88,17 +94,23 @@ def test_api_get_sort_progress_delegates_to_albums_service(main_module):
     api.albums_service = MagicMock()
     api.albums_service.get_sort_progress.return_value = {
         "job_id": "job-123",
-        "status": "running",
-        "processed": 50,
-        "total": 1847,
-        "percent": 2,
-        "message": "Processing photo 50 of 1847",
+        "status": "matching",
+        "processed": 0,
+        "total": 0,
+        "percent": 0,
+        "message": "Preparing matching job...",
     }
 
     result = api.get_sort_progress("job-123")
 
-    assert result["status"] == "running"
-    assert result["processed"] == 50
+    assert result == {
+        "job_id": "job-123",
+        "status": "matching",
+        "processed": 0,
+        "total": 0,
+        "percent": 0,
+        "message": "Preparing matching job...",
+    }
     api.albums_service.get_sort_progress.assert_called_once_with("job-123")
 
 
