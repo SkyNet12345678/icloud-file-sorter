@@ -863,7 +863,7 @@ class ICloudService:
         normalized_value += "=" * (-len(normalized_value) % 4)
         try:
             return base64.b64decode(normalized_value).decode("utf-8")
-        except (ValueError, binascii.Error, UnicodeDecodeError):
+        except (ValueError, binascii.Error):
             try:
                 return base64.urlsafe_b64decode(normalized_value).decode("utf-8")
             except (ValueError, binascii.Error, UnicodeDecodeError):
