@@ -69,8 +69,8 @@ export async function detectSourceFolder() {
     if (result.success) {
       return result.source_folder;
     }
-  } catch (exc) {
-    console.error("Failed to detect source folder:", exc);
+  } catch (error_) {
+    console.error("Failed to detect source folder:", error_);
   }
   return null;
 }
