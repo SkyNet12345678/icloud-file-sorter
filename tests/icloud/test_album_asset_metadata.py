@@ -91,6 +91,32 @@ class MasterRecordPlainFilenameAsset:
         raise binascii.Error("Incorrect padding")
 
 
+class MasterRecordEmptyFilenameEncReadableFilenameAsset:
+    id = "asset-empty-filename-enc"
+    filename = "IMG_0001.HEIC"
+    media_type = "image"
+    _master_record = {
+        "fields": {
+            "filenameEnc": {
+                "value": "",
+            }
+        }
+    }
+
+
+class MasterRecordMalformedFilenameEncReadableFilenameAsset:
+    id = "asset-malformed-filename-enc"
+    filename = "IMG_0001.HEIC"
+    media_type = "image"
+    _master_record = {
+        "fields": {
+            "filenameEnc": {
+                "value": "not-valid-base64",
+            }
+        }
+    }
+
+
 class FakeHeaderResponse:
     def __init__(self, headers):
         self.headers = headers
@@ -300,6 +326,32 @@ def test_normalize_asset_metadata_recovers_plain_text_filename_enc_without_warni
         for record in caplog.records
         if "Skipping unreadable asset field filename" in record.message
     ] == []
+
+
+def test_normalize_asset_metadata_uses_filename_when_filename_enc_is_empty():
+    service = ICloudService(api=None)
+
+    result = service._normalize_asset_metadata(
+        MasterRecordEmptyFilenameEncReadableFilenameAsset(),
+        ALBUM_SUMMARY,
+    )
+
+    assert result["asset_id"] == "asset-empty-filename-enc"
+    assert result["filename"] == "IMG_0001.HEIC"
+    assert result["original_filename"] == "IMG_0001.HEIC"
+
+
+def test_normalize_asset_metadata_uses_filename_when_filename_enc_is_malformed():
+    service = ICloudService(api=None)
+
+    result = service._normalize_asset_metadata(
+        MasterRecordMalformedFilenameEncReadableFilenameAsset(),
+        ALBUM_SUMMARY,
+    )
+
+    assert result["asset_id"] == "asset-malformed-filename-enc"
+    assert result["filename"] == "IMG_0001.HEIC"
+    assert result["original_filename"] == "IMG_0001.HEIC"
 
 
 def test_normalize_asset_metadata_recovers_filename_from_master_record_download_url(caplog):

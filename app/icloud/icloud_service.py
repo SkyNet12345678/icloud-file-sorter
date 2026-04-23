@@ -528,16 +528,12 @@ class ICloudService:
     def _read_best_filename(self, raw_asset):
         filename = self._read_filename_from_master_record(raw_asset)
         if filename is None:
-            field_names = [
+            filename = self._read_first_value(
+                raw_asset,
+                "filename",
                 "name",
                 "original_filename",
                 "originalFilename",
-            ]
-            if not self._has_master_record_filename_entry(raw_asset):
-                field_names.insert(0, "filename")
-            filename = self._read_first_value(
-                raw_asset,
-                *field_names,
             )
         return self._normalize_text_value(filename)
 
@@ -704,17 +700,6 @@ class ICloudService:
             or self._read_plain_filename_enc_value(encoded_value)
             or self._read_filename_from_master_record_resource(raw_asset, fields)
         )
-
-    def _has_master_record_filename_entry(self, raw_asset):
-        master_record = getattr(raw_asset, "_master_record", None)
-        if not isinstance(master_record, dict):
-            return False
-
-        fields = master_record.get("fields")
-        if not isinstance(fields, dict):
-            return False
-
-        return isinstance(fields.get("filenameEnc"), dict)
 
     def _read_filename_from_master_record_resource(self, raw_asset, fields):
         for field_name in (

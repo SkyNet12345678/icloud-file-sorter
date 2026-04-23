@@ -220,5 +220,7 @@ node_modules/
 # Local scratch/test directories
 mode_test/
 py_create_dir/
-
+.tmp*/
+tmp*/
+*pytestbasetemp/
 tmp/

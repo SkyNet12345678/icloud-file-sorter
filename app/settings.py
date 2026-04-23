@@ -81,9 +81,10 @@ class SettingsService:
         return self.get_app_data_dir() / ICLOUD_SESSIONS_DIRNAME
 
     def get_source_folder(self) -> str | None:
-        sf = self._settings.get("source_folder")
-        if sf and Path(sf).exists():
-            return sf
+        source_folder = self._settings.get("source_folder")
+        if source_folder is not None and str(source_folder).strip():
+            return str(source_folder)
+
         detected = _detect_source_folder()
         if detected:
             self._settings["source_folder"] = detected
