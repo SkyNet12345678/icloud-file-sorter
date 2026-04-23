@@ -10,6 +10,7 @@ from app.scanner import LocalScanner
 logger = logging.getLogger("icloud-sorter")
 
 DEFAULT_MOCK_SORT_TOTAL = 1847
+FAILED_TO_LOAD_ALBUM_ASSETS = "Failed to load album assets"
 
 
 def _album_type_name(album):
@@ -137,7 +138,7 @@ class ICloudService:
             )
         except Exception as exc:
             logger.exception("Failed to load album assets for %s: %s", album_id, exc)
-            return self._asset_failure_result(str(exc) or "Failed to load album assets")
+            return self._asset_failure_result(str(exc) or FAILED_TO_LOAD_ALBUM_ASSETS)
 
         return self._asset_success_result(album_summary, assets)
 
@@ -187,7 +188,7 @@ class ICloudService:
                 "success": False,
                 "selected_album_ids": [],
                 "assets": [],
-                "error": str(exc) or "Failed to load album assets",
+                "error": str(exc) or FAILED_TO_LOAD_ALBUM_ASSETS,
             }
 
         return {
@@ -1026,7 +1027,7 @@ class ICloudService:
                 job["processed"] = 0
                 job["total"] = 0
                 job["percent"] = 0
-                job["message"] = asset_result.get("error") or "Failed to load album assets"
+                job["message"] = asset_result.get("error") or FAILED_TO_LOAD_ALBUM_ASSETS
                 return self._copy_job_progress(job)
 
             selected_assets = asset_result["assets"]
