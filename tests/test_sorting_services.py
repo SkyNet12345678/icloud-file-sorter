@@ -244,6 +244,37 @@ def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
     ]
 
 
+def test_get_sort_progress_does_not_start_duplicate_asset_fetch_while_matching(tmp_path):
+    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    album = FakeAlbum(
+        "album-1",
+        "Vacation 2025",
+        [FakeAsset(id="asset-1", filename="IMG_001.HEIC", media_type="image")],
+    )
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 1,
+                "is_system_album": False,
+            },
+        ],
+    )
+    seed_raw_albums(service, album)
+
+    result = service.start_sort(["album-1"])
+    service.get_sort_progress(result["job_id"])
+    service.jobs[result["job_id"]]["_matching_fetch_in_progress"] = True
+
+    progress = service.get_sort_progress(result["job_id"])
+
+    assert progress["status"] == "matching"
+    assert progress["message"] == "Preparing matching job..."
+    assert album.asset_request_count == 0
+
+
 def test_start_sort_aggregates_overlapping_album_assets_into_one_job_entry(tmp_path):
     service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
     shared_local_file = tmp_path / "IMG_SHARED.HEIC"
