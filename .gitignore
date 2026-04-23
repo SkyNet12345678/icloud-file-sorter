@@ -224,3 +224,4 @@ py_create_dir/
 tmp*/
 *pytestbasetemp/
 tmp/
+sonar-issues.json
