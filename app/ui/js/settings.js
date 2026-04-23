@@ -2,12 +2,12 @@ let currentSettings = {};
 
 async function getPywebviewApi() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (window.pywebview?.api) {
-      return window.pywebview.api;
+    if (globalThis.pywebview?.api) {
+      return globalThis.pywebview.api;
     }
 
     await new Promise((resolve) => {
-      window.setTimeout(resolve, 50);
+      globalThis.setTimeout(resolve, 50);
     });
   }
 
@@ -23,8 +23,8 @@ export async function loadSettings() {
       updateSettingsUI(result.source_folder, result.sorting_approach);
       return result;
     }
-  } catch (exc) {
-    console.error("Failed to load settings:", exc);
+  } catch (error_) {
+    console.error("Failed to load settings:", error_);
   }
   return null;
 }
@@ -56,8 +56,8 @@ export async function saveSettings(sourceFolder, sortingApproach) {
       currentSettings = result.settings || {};
       return true;
     }
-  } catch (exc) {
-    console.error("Failed to save settings:", exc);
+  } catch (error_) {
+    console.error("Failed to save settings:", error_);
   }
   return false;
 }
@@ -69,8 +69,8 @@ export async function detectSourceFolder() {
     if (result.success) {
       return result.source_folder;
     }
-  } catch (exc) {
-    console.error("Failed to detect source folder:", exc);
+  } catch (error_) {
+    console.error("Failed to detect source folder:", error_);
   }
   return null;
 }

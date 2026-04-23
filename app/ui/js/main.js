@@ -1,6 +1,6 @@
 import { login, submit2FA, restartLogin } from './login.js';
 import { startSort, cancelSort } from './albums.js';
-import { loadSettings, saveSettings, showCopyWarning } from './settings.js';
+import { loadSettings, saveSettings } from './settings.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const loginBtn = document.getElementById('loginBtn');

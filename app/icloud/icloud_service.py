@@ -1,5 +1,4 @@
 import base64
-import binascii
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -11,6 +10,7 @@ from app.scanner import LocalScanner
 logger = logging.getLogger("icloud-sorter")
 
 DEFAULT_MOCK_SORT_TOTAL = 1847
+FAILED_TO_LOAD_ALBUM_ASSETS = "Failed to load album assets"
 
 
 def _album_type_name(album):
@@ -138,7 +138,7 @@ class ICloudService:
             )
         except Exception as exc:
             logger.exception("Failed to load album assets for %s: %s", album_id, exc)
-            return self._asset_failure_result(str(exc) or "Failed to load album assets")
+            return self._asset_failure_result(str(exc) or FAILED_TO_LOAD_ALBUM_ASSETS)
 
         return self._asset_success_result(album_summary, assets)
 
@@ -188,7 +188,7 @@ class ICloudService:
                 "success": False,
                 "selected_album_ids": [],
                 "assets": [],
-                "error": str(exc) or "Failed to load album assets",
+                "error": str(exc) or FAILED_TO_LOAD_ALBUM_ASSETS,
             }
 
         return {
@@ -362,8 +362,6 @@ class ICloudService:
             return None
 
         filename = filename or original_filename
-        original_filename = original_filename or filename
-
         return {
             "asset_id": asset_id,
             "filename": filename,
@@ -755,7 +753,6 @@ class ICloudService:
         if not filename:
             return None
 
-        extension = Path(filename).suffix.casefold()
         if not self._has_media_extension(filename):
             return None
         return filename
@@ -866,10 +863,10 @@ class ICloudService:
         normalized_value += "=" * (-len(normalized_value) % 4)
         try:
             return base64.b64decode(normalized_value).decode("utf-8")
-        except (ValueError, binascii.Error, UnicodeDecodeError):
+        except ValueError:
             try:
                 return base64.urlsafe_b64decode(normalized_value).decode("utf-8")
-            except (ValueError, binascii.Error, UnicodeDecodeError):
+            except ValueError:
                 return None
 
     def _build_skipped_asset_diagnostic(self, raw_asset):
@@ -1030,7 +1027,7 @@ class ICloudService:
                 job["processed"] = 0
                 job["total"] = 0
                 job["percent"] = 0
-                job["message"] = asset_result.get("error") or "Failed to load album assets"
+                job["message"] = asset_result.get("error") or FAILED_TO_LOAD_ALBUM_ASSETS
                 return self._copy_job_progress(job)
 
             selected_assets = asset_result["assets"]
