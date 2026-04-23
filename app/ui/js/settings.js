@@ -3,7 +3,7 @@ let currentSettings = {};
 async function getPywebviewApi() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     if (globalThis.pywebview?.api) {
-      return window.pywebview.api;
+      return globalThis.pywebview.api;
     }
 
     await new Promise((resolve) => {
