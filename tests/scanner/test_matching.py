@@ -126,3 +126,33 @@ def test_match_assets_returns_ambiguous_when_duplicate_filenames_exist(tmp_path)
             ],
         }
     ]
+
+
+def test_match_assets_never_introduces_automatic_fallback_match_type(tmp_path):
+    local_file = tmp_path / "IMG_0001.HEIC"
+    local_file.write_text("content", encoding="utf-8")
+    duplicate_dir = tmp_path / "duplicates"
+    duplicate_dir.mkdir()
+    duplicate_file = duplicate_dir / "IMG_0002.HEIC"
+    duplicate_file.write_text("duplicate", encoding="utf-8")
+    second_duplicate_dir = tmp_path / "duplicates-2"
+    second_duplicate_dir.mkdir()
+    third_file = second_duplicate_dir / "img_0002.heic"
+    third_file.write_text("duplicate-2", encoding="utf-8")
+    scanner = LocalScanner(tmp_path)
+    scanner.scan()
+
+    result = scanner.match_assets(
+        [
+            build_asset("asset-1", "IMG_0001.HEIC"),
+            build_asset("asset-2", "IMG_4040.HEIC"),
+            build_asset("asset-3", "IMG_0002.HEIC"),
+        ]
+    )
+
+    assert result["fallback_matched"] == 0
+    assert {asset["match_type"] for asset in result["assets"]} == {
+        "exact",
+        "none",
+        "ambiguous",
+    }

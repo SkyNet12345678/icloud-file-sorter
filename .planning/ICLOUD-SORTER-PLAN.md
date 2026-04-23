@@ -93,9 +93,15 @@ Scope:
 - aggregate asset metadata across the selected albums and preserve ordered album memberships
 - scan the local iCloud Photos folder when the user starts sorting
 - build a fast filename index for the local folder
-- match by filename first, then use size and created-at style fallbacks when needed
+- match by filename only for MVP
 - handle filename collisions and ambiguity explicitly
 - expose match quality and failure counts to the UI
+
+Important constraint:
+
+- do not use local file size or local timestamps as automatic fallback match keys for MVP
+- local iCloud placeholder files do not provide reliable enough metadata for safe automatic fallback matching
+- unresolved assets should remain `not_found` or `ambiguous` rather than being heuristically matched
 
 Corrections applied to the CSV:
 
