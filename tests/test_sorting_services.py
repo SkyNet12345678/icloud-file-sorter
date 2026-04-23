@@ -134,6 +134,7 @@ def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
     assert job["selected_albums"] == ["Vacation 2025", "Screenshots"]
     assert job["source_folder"] == str(tmp_path)
     assert job["selected_assets"] == []
+    assert job["matched_assets"] == []
     assert job["match_results"] == {
         "matched": 0,
         "fallback_matched": 0,
@@ -206,7 +207,7 @@ def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
             "ambiguous": 0,
         },
     }
-    assert service.jobs[result["job_id"]]["match_results"]["assets"] == [
+    assert service.jobs[result["job_id"]]["matched_assets"] == [
         {
             "asset_id": "asset-1",
             "filename": "IMG_001.HEIC",
@@ -242,6 +243,9 @@ def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
             "match_type": "none",
         },
     ]
+    assert service.jobs[result["job_id"]]["matched_assets"] == service.jobs[
+        result["job_id"]
+    ]["match_results"]["assets"]
 
 
 def test_get_sort_progress_does_not_start_duplicate_asset_fetch_while_matching(tmp_path):
@@ -345,7 +349,7 @@ def test_start_sort_aggregates_overlapping_album_assets_into_one_job_entry(tmp_p
         "not_found": 0,
         "ambiguous": 0,
     }
-    assert service.jobs[result["job_id"]]["match_results"]["assets"] == [
+    assert service.jobs[result["job_id"]]["matched_assets"] == [
         {
             "asset_id": "shared-1",
             "filename": "IMG_SHARED.HEIC",
@@ -386,6 +390,9 @@ def test_start_sort_aggregates_overlapping_album_assets_into_one_job_entry(tmp_p
             "match_type": "exact",
         },
     ]
+    assert service.jobs[result["job_id"]]["matched_assets"] == service.jobs[
+        result["job_id"]
+    ]["match_results"]["assets"]
 
 
 def test_get_sort_progress_excludes_selected_assets_from_polling_payload(tmp_path):
@@ -422,6 +429,7 @@ def test_get_sort_progress_excludes_selected_assets_from_polling_payload(tmp_pat
         "match_results",
     }
     assert "selected_assets" not in progress
+    assert "matched_assets" not in progress
     assert progress["match_results"] == {
         "matched": 0,
         "fallback_matched": 0,
