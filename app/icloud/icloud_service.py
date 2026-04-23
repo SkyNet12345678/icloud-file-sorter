@@ -866,7 +866,7 @@ class ICloudService:
         except ValueError:
             try:
                 return base64.urlsafe_b64decode(normalized_value).decode("utf-8")
-            except (ValueError, binascii.Error, UnicodeDecodeError):
+            except (ValueError, binascii.Error):
                 return None
 
     def _build_skipped_asset_diagnostic(self, raw_asset):
