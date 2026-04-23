@@ -23,8 +23,8 @@ export async function loadSettings() {
       updateSettingsUI(result.source_folder, result.sorting_approach);
       return result;
     }
-  } catch (exc) {
-    console.error("Failed to load settings:", exc);
+  } catch (error_) {
+    console.error("Failed to load settings:", error_);
   }
   return null;
 }
