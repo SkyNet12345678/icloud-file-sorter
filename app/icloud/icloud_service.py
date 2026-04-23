@@ -70,6 +70,7 @@ class ICloudService:
             "selected_album_ids": selected_ids,
             "selected_albums": selected_albums,
             "selected_assets": [],
+            "matched_assets": [],
             "source_folder": source_folder,
             "match_results": self._empty_match_results(),
             "message": self._build_preparing_message(),
@@ -1061,6 +1062,10 @@ class ICloudService:
                 scanner = LocalScanner(job["source_folder"])
                 scanner.scan()
                 job["match_results"] = scanner.match_assets(job["selected_assets"])
+                job["matched_assets"] = [
+                    dict(asset)
+                    for asset in job["match_results"]["assets"]
+                ]
             except Exception as exc:
                 logger.exception("Failed to match local files for job %s: %s", job["job_id"], exc)
                 job["status"] = "error"

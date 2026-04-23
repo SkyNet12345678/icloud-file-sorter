@@ -49,6 +49,9 @@ coverage.xml
 *.py.cover
 .hypothesis/
 .pytest_cache/
+*pytest_tmp*/
+*tmp_pytest*/
+*_tmp_*/
 cover/
 
 # Translations
@@ -213,5 +216,9 @@ node_modules/
 
 # AI-related
 .codex
+
+# Local scratch/test directories
+mode_test/
+py_create_dir/
 
 tmp/
