@@ -56,8 +56,8 @@ export async function saveSettings(sourceFolder, sortingApproach) {
       currentSettings = result.settings || {};
       return true;
     }
-  } catch (exc) {
-    console.error("Failed to save settings:", exc);
+  } catch (error_) {
+    console.error("Failed to save settings:", error_);
   }
   return false;
 }
