@@ -1,21 +1,26 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from app.api.auth_api import AuthApi
+from app.settings import SettingsService
 
 
 # Fixtures
 @pytest.fixture
-def auth_api():
-    return AuthApi()
+def auth_api(tmp_path):
+    return AuthApi(settings_service=SettingsService(tmp_path))
+
 
 # Mocked PyiCloudService
 class FakePyiCloudService:
+    trusted_cookie_dirs = set()
+
     def __init__(self, apple_id, password, cookie_directory=None):
         if apple_id != "test@icloud.com" or password != "correctpassword":
             raise Exception("Invalid credentials")
-        self.requires_2fa = True
+        self.cookie_directory = cookie_directory
+        self.requires_2fa = cookie_directory not in self.trusted_cookie_dirs
         self.is_trusted_session = False
         self.verified = False
 
@@ -27,17 +32,21 @@ class FakePyiCloudService:
 
     def trust_session(self):
         self.is_trusted_session = True
+        self.trusted_cookie_dirs.add(self.cookie_directory)
+        return True
 
 
 # E2E test
 @patch("app.icloud.auth.PyiCloudService", new=FakePyiCloudService)
 def test_full_login_flow(auth_api):
+    FakePyiCloudService.trusted_cookie_dirs = set()
+
     # Step 1: wrong credentials
     resp = auth_api.login("test@icloud.com", "wrongpassword")
     assert resp["success"] is False
     assert "Login failed" in resp.get("message", "")
 
-    # Step 2: correct credentials → triggers 2FA
+    # Step 2: correct credentials triggers 2FA
     resp = auth_api.login("test@icloud.com", "correctpassword")
     assert resp["success"] is False
     assert resp.get("2fa_required") is True
@@ -57,5 +66,12 @@ def test_full_login_flow(auth_api):
     assert auth_api.api is not None
     assert auth_api.api.verified is True
     assert auth_api.api.is_trusted_session is True
+    assert auth_api.icloud is not None
     # temp_session should be cleared
+    assert auth_api.temp_session is None
+
+    # Step 6: same Apple ID reuses the trusted cookie directory and skips 2FA
+    resp4 = auth_api.login("test@icloud.com", "correctpassword")
+    assert resp4 == {"success": True, "message": "Logged in"}
+    assert auth_api.api.requires_2fa is False
     assert auth_api.temp_session is None

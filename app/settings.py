@@ -8,6 +8,7 @@ logger = logging.getLogger("icloud-sorter")
 
 SCHEMA_VERSION = 1
 SETTINGS_FILENAME = "settings.json"
+ICLOUD_SESSIONS_DIRNAME = "icloud-sessions"
 
 WINDOWS_KNOWN_PATHS = [
     Path(os.environ.get("USERPROFILE", "")) / "Pictures" / "iCloud Photos",
@@ -72,6 +73,12 @@ class SettingsService:
         except IOError as exc:
             logger.error("Failed to save settings: %s", exc)
             return False
+
+    def get_app_data_dir(self) -> Path:
+        return self._settings_dir
+
+    def get_icloud_sessions_dir(self) -> Path:
+        return self.get_app_data_dir() / ICLOUD_SESSIONS_DIRNAME
 
     def get_source_folder(self) -> str | None:
         sf = self._settings.get("source_folder")

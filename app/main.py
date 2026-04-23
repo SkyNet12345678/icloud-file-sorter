@@ -9,8 +9,8 @@ logger= setup_logger()
 logger.info("App starting")
 
 # --- API Bridge ---
-auth_api = AuthApi()
 settings_service = SettingsService()
+auth_api = AuthApi(settings_service=settings_service)
 
 class API:
     def __init__(self):
