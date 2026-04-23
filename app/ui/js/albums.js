@@ -1,5 +1,6 @@
 let sortTimer = null;
 let sortState = 'idle';
+let sortPollInFlight = false;
 
 export async function loadAlbums() {
   document.getElementById('status').textContent = 'Loading albums...';
@@ -128,6 +129,11 @@ export async function startSort() {
     }
 
     sortTimer = setInterval(async () => {
+      if (sortPollInFlight) {
+        return;
+      }
+
+      sortPollInFlight = true;
       try {
         const progress = await globalThis.pywebview.api.get_sort_progress(result.job_id);
         setSortProgress(progress);
@@ -157,8 +163,10 @@ export async function startSort() {
         });
         updateSelection();
         console.error(error);
+      } finally {
+        sortPollInFlight = false;
       }
-    }, 100);
+    }, 500);
   } catch (error) {
     downloadButton.dataset.sorting = 'false';
     setSortControls(false);
