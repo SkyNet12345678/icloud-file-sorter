@@ -753,7 +753,6 @@ class ICloudService:
         if not filename:
             return None
 
-        extension = Path(filename).suffix.casefold()
         if not self._has_media_extension(filename):
             return None
         return filename
