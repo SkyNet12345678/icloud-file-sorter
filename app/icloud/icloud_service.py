@@ -362,8 +362,6 @@ class ICloudService:
             return None
 
         filename = filename or original_filename
-        original_filename = original_filename or filename
-
         return {
             "asset_id": asset_id,
             "filename": filename,
