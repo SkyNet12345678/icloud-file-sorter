@@ -7,7 +7,7 @@ async function getPywebviewApi() {
     }
 
     await new Promise((resolve) => {
-      window.setTimeout(resolve, 50);
+      globalThis.setTimeout(resolve, 50);
     });
   }
 
