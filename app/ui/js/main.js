@@ -1,5 +1,5 @@
 import { login, submit2FA, restartLogin } from './login.js';
-import { startSort, cancelSort, testFetchAlbumAssets } from './albums.js';
+import { startSort, cancelSort } from './albums.js';
 import { loadSettings, saveSettings, showCopyWarning } from './settings.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const restartBtn = document.getElementById('restartBtn');
   const startButton = document.getElementById('download-btn');
   const cancelButton = document.getElementById('cancel-btn');
-  const testFetchBtn = document.getElementById('test-fetch-btn');
   const sourceFolderInput = document.getElementById('source-folder-input');
   const sortingApproach = document.getElementById('sorting-approach');
 
@@ -17,7 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
   restartBtn.addEventListener('click', restartLogin);
   startButton.addEventListener('click', startSort);
   cancelButton.addEventListener('click', cancelSort);
-  testFetchBtn.addEventListener('click', testFetchAlbumAssets);
 
   if (sourceFolderInput) {
     sourceFolderInput.addEventListener('change', () => {

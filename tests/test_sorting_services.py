@@ -1,8 +1,10 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+from app import settings as settings_module
 from app.icloud.albums_service import AlbumsService
 from app.icloud.icloud_service import DEFAULT_MOCK_SORT_TOTAL, ICloudService
+from app.settings import SettingsService
 
 
 class FakeSettingsService:
@@ -134,6 +136,7 @@ def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
     assert job["selected_albums"] == ["Vacation 2025", "Screenshots"]
     assert job["source_folder"] == str(tmp_path)
     assert job["selected_assets"] == []
+    assert job["matched_assets"] == []
     assert job["match_results"] == {
         "matched": 0,
         "fallback_matched": 0,
@@ -206,7 +209,7 @@ def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
             "ambiguous": 0,
         },
     }
-    assert service.jobs[result["job_id"]]["match_results"]["assets"] == [
+    assert service.jobs[result["job_id"]]["matched_assets"] == [
         {
             "asset_id": "asset-1",
             "filename": "IMG_001.HEIC",
@@ -242,6 +245,9 @@ def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
             "match_type": "none",
         },
     ]
+    assert service.jobs[result["job_id"]]["matched_assets"] == service.jobs[
+        result["job_id"]
+    ]["match_results"]["assets"]
 
 
 def test_get_sort_progress_does_not_start_duplicate_asset_fetch_while_matching(tmp_path):
@@ -345,7 +351,7 @@ def test_start_sort_aggregates_overlapping_album_assets_into_one_job_entry(tmp_p
         "not_found": 0,
         "ambiguous": 0,
     }
-    assert service.jobs[result["job_id"]]["match_results"]["assets"] == [
+    assert service.jobs[result["job_id"]]["matched_assets"] == [
         {
             "asset_id": "shared-1",
             "filename": "IMG_SHARED.HEIC",
@@ -386,6 +392,9 @@ def test_start_sort_aggregates_overlapping_album_assets_into_one_job_entry(tmp_p
             "match_type": "exact",
         },
     ]
+    assert service.jobs[result["job_id"]]["matched_assets"] == service.jobs[
+        result["job_id"]
+    ]["match_results"]["assets"]
 
 
 def test_get_sort_progress_excludes_selected_assets_from_polling_payload(tmp_path):
@@ -422,6 +431,7 @@ def test_get_sort_progress_excludes_selected_assets_from_polling_payload(tmp_pat
         "match_results",
     }
     assert "selected_assets" not in progress
+    assert "matched_assets" not in progress
     assert progress["match_results"] == {
         "matched": 0,
         "fallback_matched": 0,
@@ -675,6 +685,43 @@ def test_start_sort_returns_clear_error_when_source_folder_is_not_configured():
     assert result == {
         "error": "Source folder is not configured. Choose your iCloud Photos folder in Settings before starting a sort."
     }
+
+
+def test_start_sort_reports_stale_configured_source_folder_with_real_settings_service(
+    tmp_path,
+    monkeypatch,
+):
+    configured_source_folder = tmp_path / "missing-icloud-photos"
+    detected_source_folder = tmp_path / "detected-icloud-photos"
+    detected_source_folder.mkdir()
+    settings_service = SettingsService(settings_dir=tmp_path / "settings")
+    settings_service.set_source_folder(str(configured_source_folder))
+    monkeypatch.setattr(
+        settings_module,
+        "WINDOWS_KNOWN_PATHS",
+        [detected_source_folder],
+    )
+    service = ICloudService(api=None, settings_service=settings_service)
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 156,
+                "is_system_album": False,
+            },
+        ],
+    )
+
+    result = service.start_sort(["album-1"])
+
+    expected_error = (
+        "Configured source folder was not found. "
+        "Update the source folder in Settings before starting a sort."
+    )
+    assert result == {"error": expected_error}
+    assert settings_service.get_source_folder() == str(configured_source_folder)
 
 
 def test_start_sort_returns_clear_error_when_source_folder_is_not_a_directory(tmp_path):

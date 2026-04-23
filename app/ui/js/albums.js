@@ -80,11 +80,6 @@ function updateSelection() {
   }
 
   downloadButton.disabled = selected === 0 || isSorting;
-
-  const testFetchBtn = document.getElementById('test-fetch-btn');
-  if (testFetchBtn) {
-    testFetchBtn.disabled = selected === 0 || isSorting || testFetchBtn.dataset.fetching === 'true';
-  }
 }
 
 export async function startSort() {
@@ -294,51 +289,4 @@ function formatAlbumItemCount(itemCount) {
   const normalizedCount = Number.isFinite(itemCount) ? itemCount : 0;
   const suffix = normalizedCount === 1 ? 'item' : 'items';
   return `${normalizedCount} ${suffix}`;
-}
-
-export async function testFetchAlbumAssets() {
-  if (!globalThis.pywebview?.api) {
-    console.log('pywebview API not ready');
-    return;
-  }
-
-  const testFetchBtn = document.getElementById('test-fetch-btn');
-  if (testFetchBtn.dataset.fetching === 'true') {
-    return;
-  }
-
-  const selectedCheckboxes = Array.from(
-    document.querySelectorAll('#albums-list input[type="checkbox"]:checked')
-  );
-
-  if (selectedCheckboxes.length === 0) {
-    return;
-  }
-
-  testFetchBtn.dataset.fetching = 'true';
-  testFetchBtn.disabled = true;
-  updateAlbumsStatus('Fetching album assets...', false);
-
-  try {
-    for (const checkbox of selectedCheckboxes) {
-      const albumId = checkbox.dataset.albumId;
-      const albumName = checkbox.dataset.albumName;
-
-      const result = await globalThis.pywebview.api.get_album_assets(albumId);
-      console.log(`Assets for "${albumName}":`, result);
-
-      if (result?.success) {
-        const assetCount = result.assets?.length ?? 0;
-        updateAlbumsStatus(`Fetched ${assetCount} assets for ${albumName}`, false);
-      } else {
-        updateAlbumsStatus(result?.error || `Failed to fetch assets for ${albumName}`, true);
-      }
-    }
-  } catch (err) {
-    console.error('Test fetch failed:', err);
-    updateAlbumsStatus('Failed to fetch album assets.', true);
-  } finally {
-    testFetchBtn.dataset.fetching = 'false';
-    updateSelection();
-  }
 }

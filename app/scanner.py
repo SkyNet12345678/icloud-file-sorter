@@ -88,6 +88,11 @@ class LocalScanner:
                 matched_asset["local_path"] = candidate_matches[0]["local_path"]
                 matched_asset["match_type"] = "exact"
                 match_results["matched"] += 1
+                print(
+                    "[match] "
+                    f"{matched_asset['filename']} -> {matched_asset['local_path']}",
+                    flush=True,
+                )
             elif len(candidate_matches) > 1:
                 matched_asset["match_type"] = "ambiguous"
                 matched_asset["candidate_paths"] = [
