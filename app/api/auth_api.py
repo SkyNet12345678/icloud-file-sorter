@@ -7,13 +7,18 @@ logger = logging.getLogger("icloud-sorter")
 
 
 class AuthApi:
-    def __init__(self):
+    def __init__(self, settings_service=None):
         self.api = None
         self.temp_session = None
         self.icloud = None
+        self.settings_service = settings_service
 
     def login(self, apple_id, password):
-        result = icloud_login(apple_id, password)
+        result = icloud_login(
+            apple_id,
+            password,
+            settings_service=self.settings_service,
+        )
 
         if not result.get("success"):
             logger.warning("Login failed for %s", apple_id)
@@ -47,11 +52,28 @@ class AuthApi:
                 logger.warning("Invalid 2FA code entered")
                 return {"success": False, "message": "Invalid 2FA code"}
 
-            self.temp_session.trust_session()
+            trusted = self.temp_session.trust_session()
             self.api = self.temp_session
+            self.icloud = ICloudService(self.api)
             self.temp_session = None
-            logger.info("2FA verification successful")
-            return {"success": True, "message": "Logged in"}
+
+            if trusted:
+                logger.info("2FA verification successful and session trusted")
+                return {
+                    "success": True,
+                    "message": "Logged in",
+                    "trusted_session": True,
+                }
+
+            logger.warning("2FA verification succeeded but session trust failed")
+            return {
+                "success": True,
+                "message": (
+                    "Logged in, but iCloud did not trust this session for future "
+                    "2FA skips"
+                ),
+                "trusted_session": False,
+            }
 
         except Exception as e:
             logger.exception("2FA verification error")
