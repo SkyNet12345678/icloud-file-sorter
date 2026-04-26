@@ -2,7 +2,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.icloud.auth import icloud_login
-from app.icloud.session_store import apple_id_session_key, get_session_directory
+from app.icloud.session_store import (
+    apple_id_session_key,
+    delete_session_directory,
+    get_session_directory,
+)
 from app.settings import SettingsService
 
 
@@ -74,3 +78,31 @@ def test_settings_service_exposes_public_app_data_and_session_dirs(tmp_path):
 
     assert service.get_app_data_dir() == Path(tmp_path)
     assert service.get_icloud_sessions_dir() == Path(tmp_path) / "icloud-sessions"
+
+
+def test_delete_session_directory_removes_only_target_account(tmp_path):
+    sessions_root = tmp_path / "sessions"
+    target_dir = get_session_directory("target@icloud.com", sessions_root=sessions_root)
+    other_dir = get_session_directory("other@icloud.com", sessions_root=sessions_root)
+    target_dir.mkdir(parents=True)
+    other_dir.mkdir(parents=True)
+    (target_dir / "cookie.txt").write_text("target", encoding="utf-8")
+    (other_dir / "cookie.txt").write_text("other", encoding="utf-8")
+
+    deleted = delete_session_directory(" Target@iCloud.com ", sessions_root=sessions_root)
+
+    assert deleted is True
+    assert not target_dir.exists()
+    assert other_dir.is_dir()
+    assert (other_dir / "cookie.txt").read_text(encoding="utf-8") == "other"
+
+
+def test_delete_session_directory_ignores_missing_target(tmp_path):
+    sessions_root = tmp_path / "sessions"
+    other_dir = get_session_directory("other@icloud.com", sessions_root=sessions_root)
+    other_dir.mkdir(parents=True)
+
+    deleted = delete_session_directory("missing@icloud.com", sessions_root=sessions_root)
+
+    assert deleted is False
+    assert other_dir.is_dir()

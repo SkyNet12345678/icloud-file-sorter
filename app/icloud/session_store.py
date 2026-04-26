@@ -1,4 +1,5 @@
 import hashlib
+import shutil
 from pathlib import Path
 
 from app.settings import SettingsService
@@ -28,3 +29,25 @@ def get_session_directory(
         root = service.get_icloud_sessions_dir()
 
     return Path(root) / apple_id_session_key(apple_id)
+
+
+def delete_session_directory(
+    apple_id: str,
+    *,
+    settings_service: SettingsService | None = None,
+    sessions_root: Path | None = None,
+) -> bool:
+    session_dir = get_session_directory(
+        apple_id,
+        settings_service=settings_service,
+        sessions_root=sessions_root,
+    )
+    if not session_dir.exists():
+        return False
+
+    if not session_dir.is_dir():
+        msg = f"iCloud session path is not a directory: {session_dir}"
+        raise NotADirectoryError(msg)
+
+    shutil.rmtree(session_dir)
+    return True

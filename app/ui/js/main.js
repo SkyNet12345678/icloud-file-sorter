@@ -1,9 +1,11 @@
-import { login, submit2FA, restartLogin } from './login.js';
+import { continueSession, initializeLogin, login, notYou, restartLogin, submit2FA } from './login.js';
 import { startSort, cancelSort } from './albums.js';
 import { loadSettings, saveSettings } from './settings.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const loginBtn = document.getElementById('loginBtn');
+  const continueBtn = document.getElementById('continueBtn');
+  const notYouBtn = document.getElementById('notYouBtn');
   const verifyBtn = document.getElementById('verifyBtn');
   const restartBtn = document.getElementById('restartBtn');
   const startButton = document.getElementById('download-btn');
@@ -12,6 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const sortingApproach = document.getElementById('sorting-approach');
 
   loginBtn.addEventListener('click', login);
+  continueBtn.addEventListener('click', continueSession);
+  notYouBtn.addEventListener('click', notYou);
   verifyBtn.addEventListener('click', submit2FA);
   restartBtn.addEventListener('click', restartLogin);
   startButton.addEventListener('click', startSort);
@@ -29,4 +33,5 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   loadSettings();
+  initializeLogin();
 });

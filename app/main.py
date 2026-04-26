@@ -16,6 +16,9 @@ class API:
     def __init__(self):
         self.albums_service = None
 
+    def get_auth_state(self):
+        return auth_api.get_auth_state()
+
     def login(self, apple_id, password):
         result = auth_api.login(apple_id, password)
         if result.get("success"):
@@ -23,6 +26,22 @@ class API:
                 auth_api.api,
                 settings_service=settings_service,
             )
+        return result
+
+    def continue_session(self):
+        result = auth_api.continue_session()
+        if result.get("success"):
+            self.albums_service = AlbumsService(
+                auth_api.api,
+                settings_service=settings_service,
+            )
+        else:
+            self.albums_service = None
+        return result
+
+    def logout(self):
+        result = auth_api.logout()
+        self.albums_service = None
         return result
 
     def verify_2fa(self, code):

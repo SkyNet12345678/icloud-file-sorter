@@ -49,7 +49,9 @@ class SettingsService:
             if data.get("schema_version") != SCHEMA_VERSION:
                 logger.warning("Settings schema version mismatch, using defaults")
                 return self._default_settings()
-            return data
+            settings = self._default_settings()
+            settings.update(data)
+            return settings
         except (json.JSONDecodeError, IOError) as exc:
             logger.warning("Failed to load settings: %s", exc)
             return self._default_settings()
@@ -59,6 +61,7 @@ class SettingsService:
             "schema_version": SCHEMA_VERSION,
             "source_folder": None,
             "sorting_approach": "first",
+            "remembered_apple_id": None,
         }
 
     def save(self) -> bool:
@@ -104,6 +107,27 @@ class SettingsService:
             logger.warning("Invalid sorting_approach: %s", approach)
             return False
         self._settings["sorting_approach"] = approach
+        return self.save()
+
+    def get_remembered_apple_id(self) -> str | None:
+        apple_id = self._settings.get("remembered_apple_id")
+        if apple_id is None:
+            return None
+
+        normalized = str(apple_id).strip().lower()
+        return normalized or None
+
+    def set_remembered_apple_id(self, apple_id: str) -> bool:
+        normalized = str(apple_id).strip().lower()
+        if not normalized:
+            logger.warning("Attempted to remember a blank Apple ID")
+            return False
+
+        self._settings["remembered_apple_id"] = normalized
+        return self.save()
+
+    def clear_remembered_apple_id(self) -> bool:
+        self._settings["remembered_apple_id"] = None
         return self.save()
 
     def get_all(self) -> dict:

@@ -67,3 +67,46 @@ def test_get_source_folder_autodetects_when_configured_path_is_blank(
     assert service.get_source_folder() == str(detected_source_folder)
     saved_settings = json.loads(settings_file.read_text(encoding="utf-8"))
     assert saved_settings["source_folder"] == str(detected_source_folder)
+
+
+def test_remembered_apple_id_is_normalized_and_persisted(tmp_path):
+    service = SettingsService(settings_dir=tmp_path)
+
+    assert service.set_remembered_apple_id(" User@iCloud.com ") is True
+
+    reloaded = SettingsService(settings_dir=tmp_path)
+    saved_settings = json.loads((tmp_path / SETTINGS_FILENAME).read_text(encoding="utf-8"))
+
+    assert reloaded.get_remembered_apple_id() == "user@icloud.com"
+    assert saved_settings["remembered_apple_id"] == "user@icloud.com"
+    assert "password" not in saved_settings
+    assert "2fa" not in saved_settings
+
+
+def test_clear_remembered_apple_id_persists_none(tmp_path):
+    service = SettingsService(settings_dir=tmp_path)
+    service.set_remembered_apple_id("user@icloud.com")
+
+    assert service.clear_remembered_apple_id() is True
+
+    reloaded = SettingsService(settings_dir=tmp_path)
+    assert reloaded.get_remembered_apple_id() is None
+
+
+def test_existing_schema_settings_merge_new_defaults(tmp_path):
+    settings_file = tmp_path / SETTINGS_FILENAME
+    settings_file.write_text(
+        json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "source_folder": "C:/iCloud Photos",
+                "sorting_approach": "first",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    service = SettingsService(settings_dir=tmp_path)
+
+    assert service.get_remembered_apple_id() is None
+    assert "remembered_apple_id" in service.get_all()

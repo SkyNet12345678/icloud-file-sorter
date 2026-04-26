@@ -14,7 +14,16 @@
         <h1>iCloud Photo Sorter</h1>
         <h2>Sign in with Apple ID</h2>
         <p id="status" class="status-message"></p>
-        <div id="login-form">
+
+        <div id="returning-user" style="display: none">
+          <p class="returning-user-message">
+            Continue as <strong id="rememberedAppleId"></strong>
+          </p>
+          <button id="continueBtn">Continue</button>
+          <button id="notYouBtn" class="secondary-btn">Not you?</button>
+        </div>
+
+        <div id="login-form" style="display: none">
           <input id="appleId" type="text" placeholder="Apple ID" />
           <input id="password" type="password" placeholder="Password" />
           <button id="loginBtn">Sign In</button>

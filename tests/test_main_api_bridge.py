@@ -144,6 +144,75 @@ def test_api_get_albums_empty_success_passthrough(main_module):
     }
 
 
+def test_api_get_auth_state_delegates_to_auth_api(main_module, monkeypatch):
+    auth_api = MagicMock()
+    auth_api.get_auth_state.return_value = {
+        "success": True,
+        "has_remembered_apple_id": True,
+        "remembered_apple_id": "user@icloud.com",
+    }
+    monkeypatch.setattr(main_module, "auth_api", auth_api)
+
+    result = main_module.API().get_auth_state()
+
+    assert result["remembered_apple_id"] == "user@icloud.com"
+    auth_api.get_auth_state.assert_called_once_with()
+
+
+def test_api_continue_session_initializes_albums_service(main_module, monkeypatch):
+    auth_api = MagicMock()
+    auth_api.api = MagicMock()
+    auth_api.continue_session.return_value = {"success": True, "message": "Session resumed"}
+    albums_service = MagicMock()
+    monkeypatch.setattr(main_module, "auth_api", auth_api)
+    monkeypatch.setattr(main_module, "AlbumsService", albums_service)
+    api = main_module.API()
+
+    result = api.continue_session()
+
+    assert result == {"success": True, "message": "Session resumed"}
+    albums_service.assert_called_once_with(
+        auth_api.api,
+        settings_service=main_module.settings_service,
+    )
+    assert api.albums_service is albums_service.return_value
+
+
+def test_api_continue_session_failure_clears_albums_service(main_module, monkeypatch):
+    auth_api = MagicMock()
+    auth_api.continue_session.return_value = {
+        "success": False,
+        "requires_login": True,
+        "message": "Session expired. Please sign in again.",
+    }
+    monkeypatch.setattr(main_module, "auth_api", auth_api)
+    api = main_module.API()
+    api.albums_service = MagicMock()
+
+    result = api.continue_session()
+
+    assert result == {
+        "success": False,
+        "requires_login": True,
+        "message": "Session expired. Please sign in again.",
+    }
+    assert api.albums_service is None
+
+
+def test_api_logout_clears_albums_service(main_module, monkeypatch):
+    auth_api = MagicMock()
+    auth_api.logout.return_value = {"success": True, "deleted_session": True}
+    monkeypatch.setattr(main_module, "auth_api", auth_api)
+    api = main_module.API()
+    api.albums_service = MagicMock()
+
+    result = api.logout()
+
+    assert result == {"success": True, "deleted_session": True}
+    assert api.albums_service is None
+    auth_api.logout.assert_called_once_with()
+
+
 def test_api_get_album_assets_returns_failure_when_service_is_unavailable(main_module):
     api = main_module.API()
 
