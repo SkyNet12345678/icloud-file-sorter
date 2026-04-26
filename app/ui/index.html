@@ -14,7 +14,16 @@
         <h1>iCloud Photo Sorter</h1>
         <h2>Sign in with Apple ID</h2>
         <p id="status" class="status-message"></p>
-        <div id="login-form">
+
+        <div id="returning-user" style="display: none">
+          <p class="returning-user-message">
+            Continue as <strong id="rememberedAppleId"></strong>
+          </p>
+          <button id="continueBtn">Continue</button>
+          <button id="notYouBtn" class="secondary-btn">Not you?</button>
+        </div>
+
+        <div id="login-form" style="display: none">
           <input id="appleId" type="text" placeholder="Apple ID" />
           <input id="password" type="password" placeholder="Password" />
           <button id="loginBtn">Sign In</button>
@@ -37,11 +46,25 @@
         <p>Organize your iCloud photos into folders.</p>
         <p id="albums-status" class="status-message" hidden></p>
         <br>
+        <div class="settings-section">
+          <h3>Settings</h3>
+          <label for="source-folder-input">Source folder (iCloud Photos):</label>
+          <input id="source-folder-input" type="text" placeholder="Auto-detecting..." />
+          <label for="sorting-approach">Sorting approach:</label>
+          <select id="sorting-approach">
+            <option value="first">Move to first matching album</option>
+            <option value="copy">Copy to all matching albums</option>
+          </select>
+          <div id="copy-warning" class="warning-message" style="display: none">
+            Copy will download full-resolution files from iCloud before copying.
+            This may take significant time and storage for large albums.
+          </div>
+        </div>
+        <br>
         <h3>Select albums to organize:</h3>
         <ul id="albums-list" class="albums-list"></ul>
 
         <div class="albums-footer">
-          <button id="test-fetch-btn" disabled>⬇ Test: Fetch album assets</button>
           <button id="download-btn" disabled>Sort photos to selected albums</button>
           <button id="cancel-btn" class="cancel-btn" hidden>Cancel sort</button>
           <div id="sort-progress" class="sort-progress">

@@ -6,8 +6,11 @@ logger = logging.getLogger("icloud-sorter")
 
 
 class AlbumsService:
-    def __init__(self, icloud_api):
-        self.icloud = ICloudService(icloud_api)
+    def __init__(self, icloud_api, settings_service=None):
+        self.icloud = ICloudService(
+            icloud_api,
+            settings_service=settings_service,
+        )
 
     def get_albums(self):
         if not self.icloud:

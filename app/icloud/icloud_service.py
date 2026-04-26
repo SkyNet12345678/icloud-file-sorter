@@ -1,10 +1,16 @@
+import base64
 import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+from app.scanner import LocalScanner
 
 logger = logging.getLogger("icloud-sorter")
 
 DEFAULT_MOCK_SORT_TOTAL = 1847
+FAILED_TO_LOAD_ALBUM_ASSETS = "Failed to load album assets"
 
 
 def _album_type_name(album):
@@ -12,8 +18,9 @@ def _album_type_name(album):
 
 
 class ICloudService:
-    def __init__(self, api):
+    def __init__(self, api, settings_service=None):
         self.api = api
+        self.settings_service = settings_service
         self.jobs = {}
         self.album_cache_loaded = False
         self.album_list_cache = []
@@ -21,6 +28,7 @@ class ICloudService:
         self.raw_albums_by_id = {}
         self.asset_metadata_by_album_id = {}
         self.asset_cache_loaded_album_ids = set()
+        self._logged_unreadable_asset_fields = set()
 
     def get_albums(self, force_refresh=False):
         if not self.api:
@@ -45,18 +53,31 @@ class ICloudService:
         if not selected_ids:
             return {"error": "No albums selected"}
 
+        try:
+            source_folder = self._require_source_folder()
+        except RuntimeError as exc:
+            return {"error": str(exc)}
+
         selected_albums = self._resolve_selected_album_names(selected_ids)
 
         job_id = str(uuid.uuid4())
         self.jobs[job_id] = {
             "job_id": job_id,
-            "status": "running",
+            "status": "matching",
             "processed": 0,
-            "total": DEFAULT_MOCK_SORT_TOTAL,
+            "total": 0,
             "percent": 0,
             "selected_album_ids": selected_ids,
             "selected_albums": selected_albums,
-            "message": f"Starting sort for {len(selected_ids)} album(s)...",
+            "selected_assets": [],
+            "matched_assets": [],
+            "source_folder": source_folder,
+            "match_results": self._empty_match_results(),
+            "message": self._build_preparing_message(),
+            "_matching_reported": False,
+            "_matching_prepared": False,
+            "_matching_fetch_in_progress": False,
+            "_matching_completed": False,
         }
 
         return {"job_id": job_id}
@@ -74,17 +95,20 @@ class ICloudService:
                 "message": "Unknown job id",
             }
 
+        if job["status"] == "matching":
+            return self._advance_matching_job(job)
+
         if job["status"] == "running":
             job["processed"] = min(job["processed"] + 50, job["total"])
             job["percent"] = int((job["processed"] / job["total"]) * 100) if job["total"] else 100
-            job["message"] = f'Processing photo {job["processed"]} of {job["total"]}'
+            job["message"] = self._build_processing_message(job)
 
             if job["processed"] >= job["total"]:
                 job["status"] = "complete"
                 job["percent"] = 100
-                job["message"] = "Sort complete"
+                job["message"] = self._build_complete_message(job)
 
-        return job
+        return self._copy_job_progress(job)
 
     def get_cached_album(self, album_id):
         self._require_album_cache_loaded()
@@ -114,7 +138,7 @@ class ICloudService:
             )
         except Exception as exc:
             logger.exception("Failed to load album assets for %s: %s", album_id, exc)
-            return self._asset_failure_result(str(exc) or "Failed to load album assets")
+            return self._asset_failure_result(str(exc) or FAILED_TO_LOAD_ALBUM_ASSETS)
 
         return self._asset_success_result(album_summary, assets)
 
@@ -164,7 +188,7 @@ class ICloudService:
                 "success": False,
                 "selected_album_ids": [],
                 "assets": [],
-                "error": str(exc) or "Failed to load album assets",
+                "error": str(exc) or FAILED_TO_LOAD_ALBUM_ASSETS,
             }
 
         return {
@@ -246,12 +270,29 @@ class ICloudService:
         album_summary = self.album_summaries_by_id[normalized_album_id]
         raw_album = self.raw_albums_by_id[normalized_album_id]
         normalized_assets = []
+        skipped_asset_count = 0
+        first_skipped_asset = None
 
         for raw_asset in self._iter_raw_album_assets(raw_album):
             normalized_asset = self._normalize_asset_metadata(raw_asset, album_summary)
             if normalized_asset is None:
+                skipped_asset_count += 1
+                if first_skipped_asset is None:
+                    first_skipped_asset = raw_asset
                 continue
             normalized_assets.append(normalized_asset)
+
+        if skipped_asset_count:
+            logger.warning(
+                "Skipped %d asset(s) in album %s because required filename or id metadata was unavailable",
+                skipped_asset_count,
+                album_summary["id"],
+            )
+            logger.warning(
+                "Skipped asset diagnostic for album %s: %s",
+                album_summary["id"],
+                self._build_skipped_asset_diagnostic(first_skipped_asset),
+            )
 
         cached_assets = [dict(asset) for asset in normalized_assets]
         self.asset_metadata_by_album_id[normalized_album_id] = cached_assets
@@ -297,15 +338,30 @@ class ICloudService:
     def _normalize_asset_metadata(self, raw_asset, album_summary):
         asset_id = self._read_asset_id(raw_asset)
         if not asset_id:
-            logger.warning(
+            logger.debug(
                 "Skipping asset in album %s because no stable asset id was available",
                 album_summary["id"],
             )
             return None
 
         filename = self._read_best_filename(raw_asset)
-        original_filename = self._read_best_original_filename(raw_asset) or filename
+        original_filename = (
+            self._read_best_original_filename(
+                raw_asset,
+                use_master_record=not filename,
+            )
+            or filename
+        )
 
+        if not filename and not original_filename:
+            logger.debug(
+                "Skipping asset %s in album %s because no readable filename metadata was available",
+                asset_id,
+                album_summary["id"],
+            )
+            return None
+
+        filename = filename or original_filename
         return {
             "asset_id": asset_id,
             "filename": filename,
@@ -468,23 +524,28 @@ class ICloudService:
         return normalized_asset_id
 
     def _read_best_filename(self, raw_asset):
-        filename = self._read_first_value(
-            raw_asset,
-            "filename",
-            "name",
-            "original_filename",
-            "originalFilename",
-        )
+        filename = self._read_filename_from_master_record(raw_asset)
+        if filename is None:
+            filename = self._read_first_value(
+                raw_asset,
+                "filename",
+                "name",
+                "original_filename",
+                "originalFilename",
+            )
         return self._normalize_text_value(filename)
 
-    def _read_best_original_filename(self, raw_asset):
-        original_filename = self._read_first_value(
-            raw_asset,
-            "original_filename",
-            "originalFilename",
-            "filename",
-            "name",
-        )
+    def _read_best_original_filename(self, raw_asset, use_master_record=True):
+        original_filename = None
+        if use_master_record:
+            original_filename = self._read_filename_from_master_record(raw_asset)
+        if original_filename is None:
+            original_filename = self._read_first_value(
+                raw_asset,
+                "original_filename",
+                "originalFilename",
+                "name",
+            )
         return self._normalize_text_value(original_filename)
 
     def _normalize_created_at(self, value):
@@ -559,19 +620,330 @@ class ICloudService:
         return None
 
     def _read_field_value(self, raw_asset, field_name):
-        if hasattr(raw_asset, field_name):
-            value = getattr(raw_asset, field_name)
-            if callable(value):
-                try:
-                    value = value()
-                except TypeError:
-                    return None
-            return value
-
         if isinstance(raw_asset, dict):
             return raw_asset.get(field_name)
 
+        try:
+            value = getattr(raw_asset, field_name)
+        except AttributeError:
+            return None
+        except Exception as exc:
+            self._log_unreadable_asset_field_once(raw_asset, field_name, exc)
+            return None
+
+        if callable(value):
+            try:
+                value = value()
+            except TypeError:
+                return None
+            except Exception as exc:
+                self._log_unreadable_asset_field_once(
+                    raw_asset,
+                    field_name,
+                    exc,
+                    callable_field=True,
+                )
+                return None
+        return value
+
         return None
+
+    def _log_unreadable_asset_field_once(
+        self,
+        raw_asset,
+        field_name,
+        exc,
+        *,
+        callable_field=False,
+    ):
+        log_key = (
+            type(raw_asset).__name__,
+            field_name,
+            type(exc).__name__,
+            str(exc),
+            callable_field,
+        )
+        if log_key in self._logged_unreadable_asset_fields:
+            return
+
+        self._logged_unreadable_asset_fields.add(log_key)
+        field_kind = "callable asset field" if callable_field else "asset field"
+        logger.warning(
+            "Skipping unreadable %s %s on %s: %s",
+            field_kind,
+            field_name,
+            type(raw_asset).__name__,
+            exc,
+        )
+
+    def _read_filename_from_master_record(self, raw_asset):
+        master_record = getattr(raw_asset, "_master_record", None)
+        if not isinstance(master_record, dict):
+            return None
+
+        fields = master_record.get("fields")
+        if not isinstance(fields, dict):
+            return None
+
+        filename_entry = fields.get("filenameEnc")
+        if not isinstance(filename_entry, dict):
+            return None
+
+        encoded_value = filename_entry.get("value")
+        if encoded_value in (None, ""):
+            return self._read_filename_from_master_record_resource(raw_asset, fields)
+
+        return (
+            self._decode_base64_filename(encoded_value)
+            or self._read_plain_filename_enc_value(encoded_value)
+            or self._read_filename_from_master_record_resource(raw_asset, fields)
+        )
+
+    def _read_filename_from_master_record_resource(self, raw_asset, fields):
+        for field_name in (
+            "resOriginalRes",
+            "resOriginalAltRes",
+            "resOriginalVidComplRes",
+            "resJPEGMedRes",
+            "resJPEGThumbRes",
+            "resVidMedRes",
+            "resVidSmallRes",
+        ):
+            field_value = fields.get(field_name)
+            if not isinstance(field_value, dict):
+                continue
+
+            resource_value = field_value.get("value")
+            if not isinstance(resource_value, dict):
+                continue
+
+            filename = self._read_filename_from_resource_value(resource_value)
+            if filename:
+                return filename
+
+            download_url = resource_value.get("downloadURL")
+            filename = self._filename_from_download_url(download_url)
+            if filename:
+                return filename
+
+            filename = self._filename_from_resource_headers(raw_asset, download_url)
+            if filename:
+                return filename
+        return None
+
+    def _read_filename_from_resource_value(self, resource_value):
+        for field_name in (
+            "filename",
+            "fileName",
+            "originalFilename",
+            "original_filename",
+            "name",
+        ):
+            filename = self._normalize_text_value(resource_value.get(field_name))
+            if filename and self._has_media_extension(filename):
+                return filename
+        return None
+
+    def _filename_from_download_url(self, download_url):
+        if not download_url:
+            return None
+
+        path = unquote(urlparse(str(download_url)).path)
+        filename = Path(path).name
+        if not filename:
+            return None
+
+        if not self._has_media_extension(filename):
+            return None
+        return filename
+
+    def _filename_from_resource_headers(self, raw_asset, download_url):
+        if not download_url:
+            return None
+
+        service = getattr(raw_asset, "_service", None)
+        session = getattr(service, "session", None)
+        if session is None:
+            return None
+
+        for method_name, request_kwargs in (
+            ("head", {"allow_redirects": True}),
+            ("get", {"stream": True}),
+        ):
+            request_method = getattr(session, method_name, None)
+            if not callable(request_method):
+                continue
+
+            response = None
+            try:
+                response = request_method(
+                    download_url,
+                    timeout=10,
+                    **request_kwargs,
+                )
+                filename = self._filename_from_content_disposition(
+                    getattr(response, "headers", {}).get("Content-Disposition")
+                    or getattr(response, "headers", {}).get("content-disposition")
+                )
+                if filename:
+                    return filename
+            except Exception as exc:
+                logger.debug(
+                    "Could not read resource headers for filename recovery: %s",
+                    exc,
+                )
+            finally:
+                close_response = getattr(response, "close", None)
+                if callable(close_response):
+                    close_response()
+        return None
+
+    def _filename_from_content_disposition(self, content_disposition):
+        if not content_disposition:
+            return None
+
+        for part in str(content_disposition).split(";")[1:]:
+            key, separator, value = part.strip().partition("=")
+            if not separator:
+                continue
+
+            normalized_key = key.casefold()
+            if normalized_key == "filename*":
+                filename = self._decode_extended_content_disposition_value(value)
+            elif normalized_key == "filename":
+                filename = self._strip_header_filename_value(value)
+            else:
+                continue
+
+            filename = filename.replace("\\", "/").rsplit("/", 1)[-1]
+            if filename and self._has_media_extension(filename):
+                return filename
+        return None
+
+    def _decode_extended_content_disposition_value(self, value):
+        normalized_value = self._strip_header_filename_value(value)
+        if "''" in normalized_value:
+            _, _, normalized_value = normalized_value.partition("''")
+        return unquote(normalized_value)
+
+    def _strip_header_filename_value(self, value):
+        return str(value).strip().strip('"')
+
+    def _has_media_extension(self, filename):
+        extension = Path(filename).suffix.casefold()
+        return extension in {
+            ".heic",
+            ".heif",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".gif",
+            ".tif",
+            ".tiff",
+            ".mov",
+            ".mp4",
+            ".m4v",
+        }
+
+    def _read_plain_filename_enc_value(self, encoded_value):
+        filename = self._normalize_text_value(encoded_value)
+        if filename and self._has_media_extension(filename):
+            return filename
+        return None
+
+    def _decode_base64_filename(self, encoded_value):
+        if isinstance(encoded_value, bytes):
+            normalized_value = encoded_value.decode("utf-8", errors="ignore").strip()
+        else:
+            normalized_value = str(encoded_value).strip()
+
+        if not normalized_value:
+            return None
+
+        normalized_value += "=" * (-len(normalized_value) % 4)
+        try:
+            return base64.b64decode(normalized_value).decode("utf-8")
+        except ValueError:
+            try:
+                return base64.urlsafe_b64decode(normalized_value).decode("utf-8")
+            except ValueError:
+                return None
+
+    def _build_skipped_asset_diagnostic(self, raw_asset):
+        master_record = getattr(raw_asset, "_master_record", None)
+        asset_record = getattr(raw_asset, "_asset_record", None)
+        master_fields = self._safe_record_fields(master_record)
+        asset_fields = self._safe_record_fields(asset_record)
+        filename_entry = master_fields.get("filenameEnc")
+        filename_value = None
+        if isinstance(filename_entry, dict):
+            filename_value = filename_entry.get("value")
+
+        return {
+            "asset_type": type(raw_asset).__name__,
+            "asset_id": self._safe_asset_id(raw_asset),
+            "master_record_type": type(master_record).__name__,
+            "asset_record_type": type(asset_record).__name__,
+            "master_field_keys": sorted(master_fields.keys()),
+            "asset_field_keys": sorted(asset_fields.keys()),
+            "filenameEnc_present": "filenameEnc" in master_fields,
+            "filenameEnc_value_type": type(filename_value).__name__,
+            "filenameEnc_value_length": (
+                len(str(filename_value))
+                if filename_value not in (None, "")
+                else 0
+            ),
+            "filenameEnc_has_standard_base64_chars": self._has_only_base64_chars(
+                filename_value,
+                urlsafe=False,
+            ),
+            "filenameEnc_has_urlsafe_base64_chars": self._has_only_base64_chars(
+                filename_value,
+                urlsafe=True,
+            ),
+            "resource_fields": sorted(
+                field_name
+                for field_name in master_fields
+                if field_name.endswith("Res")
+            ),
+            "resource_value_keys": self._resource_value_key_diagnostic(master_fields),
+        }
+
+    def _safe_record_fields(self, record):
+        if not isinstance(record, dict):
+            return {}
+        fields = record.get("fields")
+        if not isinstance(fields, dict):
+            return {}
+        return fields
+
+    def _safe_asset_id(self, raw_asset):
+        try:
+            return self._read_asset_id(raw_asset)
+        except Exception:
+            return None
+
+    def _has_only_base64_chars(self, value, *, urlsafe):
+        if value in (None, ""):
+            return False
+
+        allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+        allowed += "-_" if urlsafe else "+/"
+        allowed += "="
+        return all(char in allowed for char in str(value))
+
+    def _resource_value_key_diagnostic(self, fields):
+        resource_keys = {}
+        for field_name, field_value in fields.items():
+            if not field_name.endswith("Res") or not isinstance(field_value, dict):
+                continue
+
+            resource_value = field_value.get("value")
+            if not isinstance(resource_value, dict):
+                continue
+
+            resource_keys[field_name] = sorted(resource_value.keys())
+        return resource_keys
 
     def _normalize_text_value(self, value):
         if value is None:
@@ -613,6 +985,163 @@ class ICloudService:
                 for membership in asset["album_memberships"]
             ],
         }
+
+    def _copy_job_progress(self, job):
+        progress_keys = (
+            "job_id",
+            "status",
+            "processed",
+            "total",
+            "percent",
+            "message",
+        )
+        progress = {
+            key: job[key]
+            for key in progress_keys
+        }
+        progress["match_results"] = self._copy_match_results_summary(
+            job.get("match_results")
+        )
+        return progress
+
+    def _advance_matching_job(self, job):
+        if not job.get("_matching_reported"):
+            job["_matching_reported"] = True
+            return self._copy_job_progress(job)
+
+        if not job.get("_matching_prepared"):
+            if job.get("_matching_fetch_in_progress"):
+                return self._copy_job_progress(job)
+
+            job["_matching_fetch_in_progress"] = True
+            try:
+                asset_result = self.get_assets_for_album_ids(
+                    job["selected_album_ids"],
+                    force_refresh=True,
+                )
+            finally:
+                job["_matching_fetch_in_progress"] = False
+
+            if not asset_result.get("success"):
+                job["status"] = "error"
+                job["processed"] = 0
+                job["total"] = 0
+                job["percent"] = 0
+                job["message"] = asset_result.get("error") or FAILED_TO_LOAD_ALBUM_ASSETS
+                return self._copy_job_progress(job)
+
+            selected_assets = asset_result["assets"]
+            job["selected_assets"] = selected_assets
+            job["processed"] = 0
+            job["total"] = len(selected_assets)
+            job["percent"] = 0
+            job["message"] = self._build_matching_message(selected_assets)
+            job["_matching_prepared"] = True
+            return self._copy_job_progress(job)
+
+        if not job.get("_matching_completed"):
+            try:
+                scanner = LocalScanner(job["source_folder"])
+                scanner.scan()
+                job["match_results"] = scanner.match_assets(job["selected_assets"])
+                job["matched_assets"] = [
+                    dict(asset)
+                    for asset in job["match_results"]["assets"]
+                ]
+            except Exception as exc:
+                logger.exception("Failed to match local files for job %s: %s", job["job_id"], exc)
+                job["status"] = "error"
+                job["processed"] = 0
+                job["total"] = 0
+                job["percent"] = 0
+                job["message"] = "Failed to scan the local source folder for matching files"
+                return self._copy_job_progress(job)
+
+            job["_matching_completed"] = True
+
+        job["status"] = "running"
+        job["processed"] = 0
+        job["total"] = DEFAULT_MOCK_SORT_TOTAL
+        job["percent"] = 0
+        job["message"] = self._build_running_message(job)
+        return self._copy_job_progress(job)
+
+    def _build_matching_message(self, selected_assets):
+        asset_count = len(selected_assets)
+        suffix = "asset" if asset_count == 1 else "assets"
+        return f"Fetched iCloud metadata for {asset_count} {suffix}. Matching local files..."
+
+    def _build_preparing_message(self):
+        return "Preparing matching job..."
+
+    def _build_running_message(self, job):
+        match_results = self._copy_match_results_summary(job.get("match_results"))
+        return (
+            f"Starting sort for {len(job['selected_album_ids'])} album(s). "
+            f"{self._build_match_quality_message(match_results)}"
+        )
+
+    def _empty_match_results(self):
+        return {
+            "matched": 0,
+            # Kept for bridge compatibility until a verified fallback strategy exists.
+            "fallback_matched": 0,
+            "not_found": 0,
+            "ambiguous": 0,
+            "assets": [],
+        }
+
+    def _copy_match_results_summary(self, match_results):
+        summary = self._empty_match_results()
+        if isinstance(match_results, dict):
+            for key in ("matched", "fallback_matched", "not_found", "ambiguous"):
+                try:
+                    summary[key] = int(match_results.get(key, 0))
+                except (TypeError, ValueError):
+                    summary[key] = 0
+        summary.pop("assets")
+        return summary
+
+    def _build_processing_message(self, job):
+        match_results = self._copy_match_results_summary(job.get("match_results"))
+        return (
+            f"Processing photo {job['processed']} of {job['total']}. "
+            f"{self._build_match_quality_message(match_results)}"
+        )
+
+    def _build_complete_message(self, job):
+        match_results = self._copy_match_results_summary(job.get("match_results"))
+        return f"Sort complete. {self._build_match_quality_message(match_results)}"
+
+    def _build_match_quality_message(self, match_results):
+        return (
+            "Filename-only matching: "
+            f"Exact: {match_results['matched']} | "
+            f"Not found: {match_results['not_found']} | "
+            f"Ambiguous: {match_results['ambiguous']}"
+        )
+
+    def _require_source_folder(self):
+        source_folder = None
+        if self.settings_service is not None:
+            source_folder = self.settings_service.get_source_folder()
+
+        if not source_folder:
+            raise RuntimeError(
+                "Source folder is not configured. Choose your iCloud Photos folder in Settings before starting a sort."
+            )
+
+        source_path = Path(source_folder)
+        if not source_path.exists():
+            raise RuntimeError(
+                "Configured source folder was not found. Update the source folder in Settings before starting a sort."
+            )
+        if not source_path.is_dir():
+            raise RuntimeError(
+                "Configured source folder is not a folder. Update the source folder in Settings before starting a sort."
+            )
+
+        return str(source_path)
 
     def _success_result(self, albums):
         return {

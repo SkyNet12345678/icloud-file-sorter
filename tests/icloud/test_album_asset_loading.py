@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import binascii
 
 from app.icloud.icloud_service import ICloudService
 
@@ -7,6 +8,63 @@ class FakeAsset:
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+
+class BrokenFilenameAsset:
+    def __init__(self, asset_id, fallback_name, media_type="image"):
+        self.id = asset_id
+        self.name = fallback_name
+        self.media_type = media_type
+
+    @property
+    def filename(self):
+        raise binascii.Error("Incorrect padding")
+
+
+class MasterRecordFilenameAsset:
+    def __init__(self, asset_id, encoded_filename, media_type="image"):
+        self.id = asset_id
+        self.media_type = media_type
+        self._master_record = {
+            "fields": {
+                "filenameEnc": {
+                    "value": encoded_filename,
+                }
+            }
+        }
+
+    @property
+    def filename(self):
+        raise binascii.Error("Incorrect padding")
+
+
+class MissingFilenameAsset:
+    def __init__(self, asset_id, media_type="image"):
+        self.id = asset_id
+        self.media_type = media_type
+        self._master_record = {
+            "fields": {
+                "filenameEnc": {
+                    "value": "",
+                },
+                "resOriginalRes": {
+                    "value": {
+                        "downloadURL": "https://example.invalid/private-token",
+                    },
+                },
+            }
+        }
+        self._asset_record = {
+            "fields": {
+                "assetDate": {
+                    "value": 1700000000000,
+                }
+            }
+        }
+
+    @property
+    def filename(self):
+        raise binascii.Error("Incorrect padding")
 
 
 class FakeAlbum:
@@ -44,6 +102,14 @@ class TrackingPhotosService:
         if isinstance(current_albums, Exception):
             raise current_albums
         return current_albums
+
+
+class FakeSettingsService:
+    def __init__(self, source_folder):
+        self.source_folder = source_folder
+
+    def get_source_folder(self):
+        return self.source_folder
 
 
 def build_service(album_sequences):
@@ -150,6 +216,52 @@ def test_get_album_assets_treats_all_skipped_assets_as_successful_empty_result()
     }
     assert service.get_cached_album_assets("album-1") == []
     assert "album-1" in service.asset_cache_loaded_album_ids
+
+
+def test_get_album_assets_summarizes_skipped_asset_metadata(caplog):
+    album = FakeAlbum(
+        "album-1",
+        "Trips",
+        [[
+            MissingFilenameAsset("asset-1"),
+            MissingFilenameAsset("asset-2"),
+        ]],
+        item_count=2,
+    )
+    service, _ = build_service([[album]])
+    service.get_albums()
+
+    with caplog.at_level("WARNING", logger="icloud-sorter"):
+        result = service.get_album_assets("album-1")
+
+    assert result["success"] is True
+    assert result["assets"] == []
+    assert [
+        record.message
+        for record in caplog.records
+        if "because no readable filename metadata was available" in record.message
+    ] == []
+    assert [
+        record.message
+        for record in caplog.records
+        if "required filename or id metadata was unavailable" in record.message
+    ] == [
+        "Skipped 2 asset(s) in album album-1 because required filename or id metadata was unavailable"
+    ]
+    diagnostic_messages = [
+        record.message
+        for record in caplog.records
+        if "Skipped asset diagnostic for album album-1" in record.message
+    ]
+    assert len(diagnostic_messages) == 1
+    assert "'asset_type': 'MissingFilenameAsset'" in diagnostic_messages[0]
+    assert "'filenameEnc_present': True" in diagnostic_messages[0]
+    assert "'filenameEnc_value_length': 0" in diagnostic_messages[0]
+    assert "'filenameEnc_has_standard_base64_chars': False" in diagnostic_messages[0]
+    assert "'filenameEnc_has_urlsafe_base64_chars': False" in diagnostic_messages[0]
+    assert "'master_field_keys': ['filenameEnc', 'resOriginalRes']" in diagnostic_messages[0]
+    assert "'resource_value_keys': {'resOriginalRes': ['downloadURL']}" in diagnostic_messages[0]
+    assert "private-token" not in diagnostic_messages[0]
 
 
 def test_get_album_assets_returns_clear_failures_for_cold_cache_and_unknown_album():
@@ -280,3 +392,179 @@ def test_get_assets_for_album_ids_dedupes_selection_and_preserves_membership_ord
     ]
     assert album_one.asset_request_count == 1
     assert album_two.asset_request_count == 1
+
+
+def test_get_assets_for_album_ids_recovers_filename_from_master_record():
+    album = FakeAlbum(
+        "album-1",
+        "Trips",
+        [[MasterRecordFilenameAsset("asset-1", "SU1HX01BU1RFUi5IRUlD".rstrip("="))]],
+        item_count=1,
+    )
+    service, _ = build_service([[album]])
+    service.get_albums()
+
+    result = service.get_assets_for_album_ids(["album-1"])
+
+    assert result == {
+        "success": True,
+        "selected_album_ids": ["album-1"],
+        "assets": [
+            {
+                "asset_id": "asset-1",
+                "filename": "IMG_MASTER.HEIC",
+                "original_filename": "IMG_MASTER.HEIC",
+                "created_at": None,
+                "size": None,
+                "media_type": "image",
+                "album_memberships": [
+                    {
+                        "album_id": "album-1",
+                        "album_name": "Trips",
+                        "selection_order": 0,
+                    }
+                ],
+            }
+        ],
+        "error": None,
+    }
+
+
+def test_get_assets_for_album_ids_recovers_plain_text_filename_enc():
+    album = FakeAlbum(
+        "album-1",
+        "Trips",
+        [[MasterRecordFilenameAsset("asset-1", "IMG_1234.JPG")]],
+        item_count=1,
+    )
+    service, _ = build_service([[album]])
+    service.get_albums()
+
+    result = service.get_assets_for_album_ids(["album-1"])
+
+    assert result["success"] is True
+    assert result["assets"][0]["asset_id"] == "asset-1"
+    assert result["assets"][0]["filename"] == "IMG_1234.JPG"
+    assert result["assets"][0]["original_filename"] == "IMG_1234.JPG"
+
+
+def test_start_sort_forces_fresh_asset_refresh_for_selected_albums_only(tmp_path):
+    (tmp_path / "IMG_0002.HEIC").write_text("asset-2", encoding="utf-8")
+    album_one = FakeAlbum(
+        "album-1",
+        "Trips",
+        [
+            [FakeAsset(id="asset-1", filename="IMG_0001.HEIC", media_type="image")],
+            [FakeAsset(id="asset-2", filename="IMG_0002.HEIC", media_type="image")],
+        ],
+        item_count=1,
+    )
+    album_two = FakeAlbum(
+        "album-2",
+        "Favorites",
+        [[FakeAsset(id="asset-9", filename="IMG_1000.HEIC", media_type="image")]],
+        item_count=1,
+    )
+    service, _ = build_service([[album_one, album_two]])
+    service.settings_service = FakeSettingsService(tmp_path)
+    service.get_albums()
+
+    service.get_album_assets("album-1")
+    service.get_album_assets("album-2")
+
+    result = service.start_sort(["album-1"])
+    service.get_sort_progress(result["job_id"])
+    matching_progress = service.get_sort_progress(result["job_id"])
+
+    assert matching_progress["status"] == "matching"
+    assert matching_progress["total"] == 1
+    assert matching_progress["match_results"] == {
+        "matched": 0,
+        "fallback_matched": 0,
+        "not_found": 0,
+        "ambiguous": 0,
+    }
+    assert album_one.asset_request_count == 2
+    assert album_two.asset_request_count == 1
+    assert service.jobs[result["job_id"]]["selected_assets"] == [
+        {
+            "asset_id": "asset-2",
+            "filename": "IMG_0002.HEIC",
+            "original_filename": "IMG_0002.HEIC",
+            "created_at": None,
+            "size": None,
+            "media_type": "image",
+            "album_memberships": [
+                {
+                    "album_id": "album-1",
+                    "album_name": "Trips",
+                    "selection_order": 0,
+                }
+            ],
+        }
+    ]
+
+    running_progress = service.get_sort_progress(result["job_id"])
+
+    assert running_progress["status"] == "running"
+    assert running_progress["match_results"] == {
+        "matched": 1,
+        "fallback_matched": 0,
+        "not_found": 0,
+        "ambiguous": 0,
+    }
+    assert service.jobs[result["job_id"]]["match_results"]["assets"] == [
+        {
+            "asset_id": "asset-2",
+            "filename": "IMG_0002.HEIC",
+            "original_filename": "IMG_0002.HEIC",
+            "created_at": None,
+            "size": None,
+            "media_type": "image",
+            "album_memberships": [
+                {
+                    "album_id": "album-1",
+                    "album_name": "Trips",
+                    "selection_order": 0,
+                }
+            ],
+            "local_path": str(tmp_path / "IMG_0002.HEIC"),
+            "match_type": "exact",
+        }
+    ]
+
+
+def test_get_assets_for_album_ids_tolerates_unreadable_filename_property():
+    album = FakeAlbum(
+        "album-1",
+        "Trips",
+        [[BrokenFilenameAsset("asset-1", "IMG_FALLBACK.HEIC")]],
+        item_count=1,
+    )
+    service, _ = build_service([[album]])
+    service.get_albums()
+
+    result = service.get_assets_for_album_ids(["album-1"])
+
+    assert result == {
+        "success": True,
+        "selected_album_ids": ["album-1"],
+        "assets": [
+            {
+                "asset_id": "asset-1",
+                "filename": "IMG_FALLBACK.HEIC",
+                "original_filename": "IMG_FALLBACK.HEIC",
+                "created_at": None,
+                "size": None,
+                "media_type": "image",
+                "album_memberships": [
+                    {
+                        "album_id": "album-1",
+                        "album_name": "Trips",
+                        "selection_order": 0,
+                    }
+                ],
+            }
+        ],
+        "error": None,
+    }

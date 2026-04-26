@@ -178,4 +178,153 @@ describe("albums.js", () => {
     expect(startSort).toHaveBeenCalledWith(["album-1"]);
     expect(setIntervalMock).toHaveBeenCalledTimes(1);
   });
+
+  it("shows a visible error when sort start validation fails", async () => {
+    const startSort = vi.fn().mockResolvedValue({
+      error: "Source folder is not configured. Choose your iCloud Photos folder in Settings before starting a sort.",
+    });
+
+    globalThis.pywebview = {
+      api: {
+        start_sort: startSort,
+        get_sort_progress: vi.fn(),
+      },
+    };
+
+    const albums = await import("../../app/ui/js/albums.js");
+    albums.showAlbums([
+      { id: "album-1", name: "Trips", item_count: 12, is_system_album: false },
+    ]);
+
+    document.querySelector('#albums-list input[data-album-id="album-1"]').checked = true;
+
+    await albums.startSort();
+
+    expect(startSort).toHaveBeenCalledWith(["album-1"]);
+    expect(document.getElementById("albums-status").textContent).toBe(
+      "Source folder is not configured. Choose your iCloud Photos folder in Settings before starting a sort.",
+    );
+    expect(document.getElementById("albums-status").hidden).toBe(false);
+    expect(document.getElementById("sort-progress-content").hidden).toBe(false);
+    expect(document.getElementById("sort-progress-message").textContent).toBe(
+      "Source folder is not configured. Choose your iCloud Photos folder in Settings before starting a sort.",
+    );
+    expect(document.getElementById("download-btn").hidden).toBe(false);
+    expect(document.getElementById("cancel-btn").hidden).toBe(true);
+  });
+
+  it("renders matching-stage progress from lightweight polling payloads", async () => {
+    const startSort = vi.fn().mockResolvedValue({ job_id: "job-1" });
+    const getSortProgress = vi.fn().mockResolvedValue({
+      job_id: "job-1",
+      status: "matching",
+      processed: 0,
+      total: 0,
+      percent: 0,
+      message: "Preparing matching job...",
+    });
+
+    globalThis.pywebview = {
+      api: {
+        start_sort: startSort,
+        get_sort_progress: getSortProgress,
+      },
+    };
+
+    let pollSortProgress;
+    const setIntervalMock = vi.fn((callback) => {
+      pollSortProgress = callback;
+      return 1;
+    });
+    const clearIntervalMock = vi.fn();
+    vi.stubGlobal("setInterval", setIntervalMock);
+    vi.stubGlobal("clearInterval", clearIntervalMock);
+
+    const albums = await import("../../app/ui/js/albums.js");
+    albums.showAlbums([
+      { id: "album-1", name: "Trips", item_count: 12, is_system_album: false },
+    ]);
+
+    document.querySelector('#albums-list input[data-album-id="album-1"]').checked = true;
+
+    await albums.startSort();
+    await pollSortProgress();
+
+    expect(getSortProgress).toHaveBeenCalledWith("job-1");
+    expect(document.getElementById("sort-progress-message").textContent).toBe(
+      "Preparing matching job...",
+    );
+    expect(document.getElementById("sort-progress-percent").textContent).toBe("0%");
+    expect(document.getElementById("download-btn").hidden).toBe(true);
+    expect(document.getElementById("cancel-btn").hidden).toBe(false);
+  });
+
+  it("keeps filename-only match quality visible in the sort status text", async () => {
+    const startSort = vi.fn().mockResolvedValue({ job_id: "job-1" });
+    const getSortProgress = vi
+      .fn()
+      .mockResolvedValueOnce({
+        job_id: "job-1",
+        status: "running",
+        processed: 0,
+        total: 1847,
+        percent: 0,
+        message:
+          "Starting sort for 1 album(s). Filename-only matching: Exact: 1 | Not found: 2 | Ambiguous: 3",
+        match_results: {
+          matched: 1,
+          fallback_matched: 0,
+          not_found: 2,
+          ambiguous: 3,
+        },
+      })
+      .mockResolvedValueOnce({
+        job_id: "job-1",
+        status: "running",
+        processed: 50,
+        total: 1847,
+        percent: 2,
+        message:
+          "Processing photo 50 of 1847. Filename-only matching: Exact: 1 | Not found: 2 | Ambiguous: 3",
+        match_results: {
+          matched: 1,
+          fallback_matched: 0,
+          not_found: 2,
+          ambiguous: 3,
+        },
+      });
+
+    globalThis.pywebview = {
+      api: {
+        start_sort: startSort,
+        get_sort_progress: getSortProgress,
+      },
+    };
+
+    let pollSortProgress;
+    const setIntervalMock = vi.fn((callback) => {
+      pollSortProgress = callback;
+      return 1;
+    });
+    vi.stubGlobal("setInterval", setIntervalMock);
+    vi.stubGlobal("clearInterval", vi.fn());
+
+    const albums = await import("../../app/ui/js/albums.js");
+    albums.showAlbums([
+      { id: "album-1", name: "Trips", item_count: 12, is_system_album: false },
+    ]);
+
+    document.querySelector('#albums-list input[data-album-id="album-1"]').checked = true;
+
+    await albums.startSort();
+    await pollSortProgress();
+    expect(document.getElementById("sort-progress-message").textContent).toBe(
+      "Starting sort for 1 album(s). Filename-only matching: Exact: 1 | Not found: 2 | Ambiguous: 3",
+    );
+
+    await pollSortProgress();
+    expect(document.getElementById("sort-progress-message").textContent).toBe(
+      "Processing photo 50 of 1847. Filename-only matching: Exact: 1 | Not found: 2 | Ambiguous: 3",
+    );
+  });
 });

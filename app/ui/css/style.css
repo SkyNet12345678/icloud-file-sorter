@@ -54,6 +54,14 @@ body, html {
   font-size: 14px;
 }
 
+.returning-user-message {
+  margin: 10px 0 4px;
+  color: #333;
+  font-size: 15px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
 .login-card button {
   width: 100%;
   padding: 12px;

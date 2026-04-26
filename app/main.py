@@ -3,27 +3,54 @@ import webview
 from app.api.auth_api import AuthApi
 from app.icloud.albums_service import AlbumsService
 from app.logger import setup_logger
+from app.settings import SettingsService
 
 logger= setup_logger()
 logger.info("App starting")
 
 # --- API Bridge ---
-auth_api = AuthApi()
+settings_service = SettingsService()
+auth_api = AuthApi(settings_service=settings_service)
 
 class API:
     def __init__(self):
         self.albums_service = None
 
+    def get_auth_state(self):
+        return auth_api.get_auth_state()
+
     def login(self, apple_id, password):
         result = auth_api.login(apple_id, password)
         if result.get("success"):
-            self.albums_service = AlbumsService(auth_api.api)
+            self.albums_service = AlbumsService(
+                auth_api.api,
+                settings_service=settings_service,
+            )
+        return result
+
+    def continue_session(self):
+        result = auth_api.continue_session()
+        if result.get("success"):
+            self.albums_service = AlbumsService(
+                auth_api.api,
+                settings_service=settings_service,
+            )
+        else:
+            self.albums_service = None
+        return result
+
+    def logout(self):
+        result = auth_api.logout()
+        self.albums_service = None
         return result
 
     def verify_2fa(self, code):
         result = auth_api.verify_2fa(code)
         if result.get("success"):
-            self.albums_service = AlbumsService(auth_api.api)
+            self.albums_service = AlbumsService(
+                auth_api.api,
+                settings_service=settings_service,
+            )
         return result
 
     def get_albums(self):
@@ -69,6 +96,31 @@ class API:
                 "message": "Sorting service unavailable",
             }
         return self.albums_service.get_sort_progress(job_id)
+
+    def get_settings(self):
+        return {
+            "success": True,
+            "settings": settings_service.get_all(),
+            "source_folder": settings_service.get_source_folder(),
+            "sorting_approach": settings_service.get_sorting_approach(),
+        }
+
+    def save_settings(self, source_folder=None, sorting_approach=None):
+        if source_folder is not None:
+            settings_service.set_source_folder(source_folder)
+        if sorting_approach is not None:
+            settings_service.set_sorting_approach(sorting_approach)
+        return {
+            "success": True,
+            "settings": settings_service.get_all(),
+        }
+
+    def detect_source_folder(self):
+        detected = settings_service.detect_source_folder()
+        return {
+            "success": True,
+            "source_folder": detected,
+        }
 
 # --- Create pywebview window ---
 webview.create_window(
