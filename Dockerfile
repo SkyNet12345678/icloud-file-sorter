@@ -6,11 +6,9 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 COPY pyproject.toml ./
+COPY src ./src
 
 RUN pip install --upgrade pip && pip install .
 
 
-# Copy source code
-COPY app ./app
-
-CMD ["python", "-m", "app.main"]
+CMD ["python", "-m", "backend.main"]
