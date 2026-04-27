@@ -22,8 +22,18 @@ def normalize_filename(filename: str | None) -> str | None:
 
 
 class LocalScanner:
-    def __init__(self, source_folder: str | Path):
+    def __init__(
+        self,
+        source_folder: str | Path,
+        *,
+        ignored_paths: set[str] | list[str] | tuple[str, ...] | None = None,
+    ):
         self.source_folder = Path(source_folder)
+        self.ignored_paths = {
+            _normalize_path_key(path)
+            for path in ignored_paths or []
+            if path
+        }
         self.filename_index: dict[str, list[dict]] = {}
         self.scanned_files: list[dict] = []
 
@@ -33,6 +43,8 @@ class LocalScanner:
 
         for path in sorted(self.source_folder.rglob("*")):
             if not path.is_file():
+                continue
+            if _normalize_path_key(path) in self.ignored_paths:
                 continue
 
             file_record = {
@@ -106,3 +118,7 @@ class LocalScanner:
             match_results["assets"].append(matched_asset)
 
         return match_results
+
+
+def _normalize_path_key(path: str | Path) -> str:
+    return str(Path(path).resolve(strict=False)).casefold()
