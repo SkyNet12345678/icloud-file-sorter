@@ -49,12 +49,12 @@
 
 ## 6. Multi-Album Behavior
 
-- [ ] 6.1 Implement `first` behavior as move to the first selected album in selected album list order
-- [ ] 6.2 Implement `copy` behavior as copy to every selected album folder while preserving source file
-- [ ] 6.3 Ensure user selection/list order is preserved from the existing UI payload
-- [ ] 6.4 Handle empty selection and single-album selection edge cases
-- [ ] 6.5 Ensure copy-mode operations track created copy paths in state
-- [ ] 6.6 Create unit tests for `first` and `copy` behavior
+- [x] 6.1 Implement `first` behavior as move to the first selected album in selected album list order
+- [x] 6.2 Implement `copy` behavior as copy to every selected album folder while preserving source file
+- [x] 6.3 Ensure user selection/list order is preserved from the existing UI payload
+- [x] 6.4 Handle empty selection and single-album selection edge cases
+- [x] 6.5 Ensure copy-mode operations track created copy paths in state
+- [x] 6.6 Create unit tests for `first` and `copy` behavior
 
 ## 7. Sort Job Orchestration
 
