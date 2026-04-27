@@ -99,9 +99,9 @@
 
 ## 11. Documentation and Cleanup
 
-- [ ] 11.1 Update README or user-facing docs for real sorting behavior
-- [ ] 11.2 Document that copy mode can require significant storage and may trigger downloads
-- [ ] 11.3 Document cancellation semantics: cancel is not undo
-- [ ] 11.4 Document placeholder/offline reconciliation as future investigation, not MVP behavior
-- [ ] 11.5 Ensure code follows existing project style and conventions
-- [ ] 11.6 Review and remove temporary/debug sorting code
+- [x] 11.1 Update README or user-facing docs for real sorting behavior
+- [x] 11.2 Document that copy mode can require significant storage and may trigger downloads
+- [x] 11.3 Document cancellation semantics: cancel is not undo
+- [x] 11.4 Document placeholder/offline reconciliation as future investigation, not MVP behavior
+- [x] 11.5 Ensure code follows existing project style and conventions
+- [x] 11.6 Review and remove temporary/debug sorting code
