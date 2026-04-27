@@ -2,6 +2,7 @@ from types import SimpleNamespace
 import binascii
 
 from app.icloud.icloud_service import ICloudService
+from app.sorting.sort_job import SortJobManager
 
 
 class FakeAsset:
@@ -467,19 +468,20 @@ def test_start_sort_forces_fresh_asset_refresh_for_selected_albums_only(tmp_path
     )
     service, _ = build_service([[album_one, album_two]])
     service.settings_service = FakeSettingsService(tmp_path)
+    service.sort_job_manager = SortJobManager(run_async=False)
+    service.jobs = service.sort_job_manager.jobs
     service.get_albums()
 
     service.get_album_assets("album-1")
     service.get_album_assets("album-2")
 
     result = service.start_sort(["album-1"])
-    service.get_sort_progress(result["job_id"])
-    matching_progress = service.get_sort_progress(result["job_id"])
+    progress = service.get_sort_progress(result["job_id"])
 
-    assert matching_progress["status"] == "matching"
-    assert matching_progress["total"] == 1
-    assert matching_progress["match_results"] == {
-        "matched": 0,
+    assert progress["status"] == "complete"
+    assert progress["total"] == 1
+    assert progress["match_results"] == {
+        "matched": 1,
         "fallback_matched": 0,
         "not_found": 0,
         "ambiguous": 0,
@@ -504,10 +506,10 @@ def test_start_sort_forces_fresh_asset_refresh_for_selected_albums_only(tmp_path
         }
     ]
 
-    running_progress = service.get_sort_progress(result["job_id"])
+    follow_up_progress = service.get_sort_progress(result["job_id"])
 
-    assert running_progress["status"] == "running"
-    assert running_progress["match_results"] == {
+    assert follow_up_progress["status"] == "complete"
+    assert follow_up_progress["match_results"] == {
         "matched": 1,
         "fallback_matched": 0,
         "not_found": 0,

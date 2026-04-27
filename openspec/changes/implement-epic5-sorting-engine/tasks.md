@@ -49,23 +49,23 @@
 
 ## 6. Multi-Album Behavior
 
-- [ ] 6.1 Implement `first` behavior as move to the first selected album in selected album list order
-- [ ] 6.2 Implement `copy` behavior as copy to every selected album folder while preserving source file
-- [ ] 6.3 Ensure user selection/list order is preserved from the existing UI payload
-- [ ] 6.4 Handle empty selection and single-album selection edge cases
-- [ ] 6.5 Ensure copy-mode operations track created copy paths in state
-- [ ] 6.6 Create unit tests for `first` and `copy` behavior
+- [x] 6.1 Implement `first` behavior as move to the first selected album in selected album list order
+- [x] 6.2 Implement `copy` behavior as copy to every selected album folder while preserving source file
+- [x] 6.3 Ensure user selection/list order is preserved from the existing UI payload
+- [x] 6.4 Handle empty selection and single-album selection edge cases
+- [x] 6.5 Ensure copy-mode operations track created copy paths in state
+- [x] 6.6 Create unit tests for `first` and `copy` behavior
 
 ## 7. Sort Job Orchestration
 
-- [ ] 7.1 Create sort job manager/orchestrator for matching handoff, operation planning, execution, progress, and summaries
-- [ ] 7.2 Replace downstream mocked progress with actual planned file operation counts
-- [ ] 7.3 Implement background/non-blocking processing for sort jobs
-- [ ] 7.4 Implement lifecycle states: start, matching/planning, running, cancelling, cancelled, complete, error
-- [ ] 7.5 Implement cancellation as stop-after-current-operation with no rollback
-- [ ] 7.6 Persist state periodically during processing and when cancellation/completion occurs
-- [ ] 7.7 Generate final summary counts and skipped/error details
-- [ ] 7.8 Create unit tests for orchestration, cancellation, completion, and summary generation
+- [x] 7.1 Create sort job manager/orchestrator for matching handoff, operation planning, execution, progress, and summaries
+- [x] 7.2 Replace downstream mocked progress with actual planned file operation counts
+- [x] 7.3 Implement background/non-blocking processing for sort jobs
+- [x] 7.4 Implement lifecycle states: start, matching/planning, running, cancelling, cancelled, complete, error
+- [x] 7.5 Implement cancellation as stop-after-current-operation with no rollback
+- [x] 7.6 Persist state periodically during processing and when cancellation/completion occurs
+- [x] 7.7 Generate final summary counts and skipped/error details
+- [x] 7.8 Create unit tests for orchestration, cancellation, completion, and summary generation
 
 ## 8. Python Bridge and Frontend Wiring
 
