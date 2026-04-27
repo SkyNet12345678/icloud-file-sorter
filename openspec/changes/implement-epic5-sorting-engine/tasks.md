@@ -1,106 +1,107 @@
-## 1. Project Setup and Infrastructure
+## 1. Baseline Alignment
 
-- [ ] 1.1 Create app/sorting/ and app/state/ directories
-- [ ] 1.2 Set up initial module structure with __init__.py files
-- [ ] 1.3 Create basic logger configuration if not already present
-- [ ] 1.4 Verify Python 3.11 compatibility for new modules
+- [ ] 1.1 Confirm Epic 5 reuses existing `app/settings.py` instead of creating a parallel settings model
+- [ ] 1.2 Confirm `source_folder` and `sorting_approach` remain the persisted settings keys
+- [ ] 1.3 Confirm `sorting_approach` values remain `first` and `copy`
+- [ ] 1.4 Confirm existing selected-album asset aggregation is the sorting-engine input
+- [ ] 1.5 Confirm existing recursive filename scanner is reused as the matching baseline
 
-## 2. Settings Persistence Implementation
+## 2. Sort State Persistence
 
-- [ ] 2.1 Define settings data model with schema_version, icloud_photos_path, last_used_apple_id, sort_mode, multi_album_mode
-- [ ] 2.2 Implement atomic JSON write functionality for settings
-- [ ] 2.3 Create settings persistence module with load/save functions
-- [ ] 2.4 Add default settings initialization and fallback handling
-- [ ] 2.5 Implement settings validation and sanitization
-- [ ] 2.6 Create unit tests for settings persistence
+- [ ] 2.1 Define sort state schema with `schema_version`, job metadata, selected albums, album folder mappings, processed assets, statuses, errors, and timestamps
+- [ ] 2.2 Add canonical/moved path and app-created copy path tracking to state records
+- [ ] 2.3 Implement atomic JSON write functionality for sort state
+- [ ] 2.4 Implement sort state load/save helpers using the existing app data directory
+- [ ] 2.5 Treat missing/stale persisted paths as advisory state, not corruption
+- [ ] 2.6 Add cleanup/ignore behavior for missing tracked copy paths
+- [ ] 2.7 Create unit tests for sort state persistence and stale path handling
 
-## 3. Sort State Persistence Implementation
+## 3. Album Folder Mapping
 
-- [ ] 3.1 Define sort state data model with schema_version, last_sync_at, albums array with file tracking
-- [ ] 3.2 Implement atomic JSON write functionality for sort state
-- [ ] 3.3 Create sort state persistence module with load/save functions
-- [ ] 3.4 Add functionality to track individual file processing status
-- [ ] 3.5 Implement resume capability from existing state file
-- [ ] 3.6 Add state cleanup and version migration handling
-- [ ] 3.7 Create unit tests for sort state persistence
+- [ ] 3.1 Implement Windows-safe folder-name sanitization for iCloud album names
+- [ ] 3.2 Handle reserved Windows names, illegal characters, trailing spaces/dots, and overly long names
+- [ ] 3.3 Persist stable album ID to folder path mappings
+- [ ] 3.4 Add deterministic suffix handling for duplicate sanitized album names
+- [ ] 3.5 Keep existing folder mappings stable when iCloud album names/order change
+- [ ] 3.6 Create unit tests for folder-name sanitization, duplicate names, and mapping stability
 
-## 4. Sorting Engine Core - Matching Logic
+## 4. Matching Extension for Recursive Re-Sort
 
-- [ ] 4.1 Create matcher module to process iCloud asset metadata
-- [ ] 4.2 Implement filename-based matching algorithm (case-insensitive)
-- [ ] 4.3 Build local file index from iCloud Photos folder
-- [ ] 4.4 Handle ambiguous matches (multiple local files with same name)
-- [ ] 4.5 Detect and report unmatched assets (no local file found)
-- [ ] 4.6 Create unit tests for matching logic
+- [ ] 4.1 Extend matching/indexing to suppress existing app-created copy paths from candidate matches
+- [ ] 4.2 Preserve moved files as valid recursive match candidates wherever they currently live
+- [ ] 4.3 Preserve ambiguous handling for multiple untracked same-filename candidates
+- [ ] 4.4 Preserve unmatched handling when no local candidate exists
+- [ ] 4.5 Add tests proving app-created copies do not create future ambiguity
+- [ ] 4.6 Add tests proving moved files in album folders remain matchable on later sorts
 
-## 5. Sorting Engine Core - File Operations
+## 5. Safe File Operations
 
-- [ ] 5.1 Create file operations module for folder creation and file moving/copying
-- [ ] 5.2 Implement album folder creation within iCloud Photos directory
-- [ ] 5.3 Add safe file move functionality with error handling
-- [ ] 5.4 Add safe file copy functionality with error handling
-- [ ] 5.5 Implement behavior selection based on multi-album setting
-- [ ] 5.6 Add comprehensive error handling for file operations (permissions, locked files, etc.)
-- [ ] 5.7 Create unit tests for file operations
+- [ ] 5.1 Create file operations module for album folder creation and file moving/copying
+- [ ] 5.2 Validate destination folders can be created/written before processing operations
+- [ ] 5.3 Implement safe file move functionality with no automatic overwrite
+- [ ] 5.4 Implement safe file copy functionality with no automatic overwrite
+- [ ] 5.5 Implement `already_sorted` when source path equals destination path
+- [ ] 5.6 Implement `already_copied` when destination exists as a tracked app-created copy
+- [ ] 5.7 Implement `skipped_destination_exists` when destination exists but is not tracked
+- [ ] 5.8 Implement `skipped_source_missing` when a previously matched source is gone
+- [ ] 5.9 Implement filesystem error capture while continuing remaining files where possible
+- [ ] 5.10 Create unit tests for move/copy/no-op/conflict/error scenarios
 
-## 6. Sort Job Orchestration
+## 6. Multi-Album Behavior
 
-- [ ] 6.1 Create sort job manager class to orchestrate the sorting process
-- [ ] 6.2 Implement background processing for sort jobs (non-blocking)
-- [ ] 6.3 Add progress tracking (percentage, counts, current operation)
-- [ ] 6.4 Implement sort job lifecycle (start, pause, resume, cancel)
-- [ ] 6.5 Add periodic state saving during processing
-- [ ] 6.6 Handle job completion and final reporting
-- [ ] 6.7 Create unit tests for sort job orchestration
+- [ ] 6.1 Implement `first` behavior as move to the first selected album in selected album list order
+- [ ] 6.2 Implement `copy` behavior as copy to every selected album folder while preserving source file
+- [ ] 6.3 Ensure user selection/list order is preserved from the existing UI payload
+- [ ] 6.4 Handle empty selection and single-album selection edge cases
+- [ ] 6.5 Ensure copy-mode operations track created copy paths in state
+- [ ] 6.6 Create unit tests for `first` and `copy` behavior
 
-## 7. Python Bridge Updates
+## 7. Sort Job Orchestration
 
-- [ ] 7.1 Update start_sort() to initiate real sort job and return job ID
-- [ ] 7.2 Update get_sort_progress() to return real progress data
-- [ ] 7.3 Ensure bridge methods maintain compatibility with existing frontend
-- [ ] 7.4 Add error handling in bridge methods for sort job failures
-- [ ] 7.5 Create unit tests for bridge method interactions
+- [ ] 7.1 Create sort job manager/orchestrator for matching handoff, operation planning, execution, progress, and summaries
+- [ ] 7.2 Replace downstream mocked progress with actual planned file operation counts
+- [ ] 7.3 Implement background/non-blocking processing for sort jobs
+- [ ] 7.4 Implement lifecycle states: start, matching/planning, running, cancelling, cancelled, complete, error
+- [ ] 7.5 Implement cancellation as stop-after-current-operation with no rollback
+- [ ] 7.6 Persist state periodically during processing and when cancellation/completion occurs
+- [ ] 7.7 Generate final summary counts and skipped/error details
+- [ ] 7.8 Create unit tests for orchestration, cancellation, completion, and summary generation
 
-## 8. Multi-Album Behavior Implementation
+## 8. Python Bridge and Frontend Wiring
 
-- [ ] 8.1 Implement move_first_selected_album behavior logic
-- [ ] 8.2 Implement copy_to_each_album behavior logic
-- [ ] 8.3 Add settings integration for multi-album behavior selection
-- [ ] 8.4 Preserve user selection order for deterministic behavior
-- [ ] 8.5 Handle edge cases (empty selection, single album selection)
-- [ ] 8.6 Create unit tests for multi-album behavior
+- [ ] 8.1 Update `start_sort(selected_album_ids)` to start the real sort job and return a job ID
+- [ ] 8.2 Update `get_sort_progress(job_id)` to return real progress, counts, skipped/error summaries, and terminal statuses
+- [ ] 8.3 Add `cancel_sort(job_id)` bridge method
+- [ ] 8.4 Wire the existing frontend Cancel button to `cancel_sort(job_id)`
+- [ ] 8.5 Preserve bridge compatibility for existing album selection and progress polling
+- [ ] 8.6 Ensure settings UI continues using existing `source_folder` and `sorting_approach` values
+- [ ] 8.7 Create/update tests for bridge interactions and frontend cancel behavior where practical
 
-## 9. Error Handling and Robustness
+## 9. Source Folder Validation
 
-- [ ] 9.1 Implement comprehensive error handling for file system operations
-- [ ] 9.2 Add retry logic for transient failures where appropriate
-- [ ] 9.3 Ensure sort jobs continue despite individual file errors
-- [ ] 9.4 Collect and report errors in final sort summary
-- [ ] 9.5 Handle critical errors that should abort the entire job
-- [ ] 9.6 Create unit tests for error handling scenarios
+- [ ] 9.1 Keep auto-detection limited to cases where no source folder is configured
+- [ ] 9.2 Preserve stale configured paths instead of silently replacing them with a newly detected path
+- [ ] 9.3 Validate source folder existence, directory status, readability, and destination write capability before file operations
+- [ ] 9.4 Return clear guidance when source-folder validation fails
+- [ ] 9.5 Treat iCloud for Windows installation detection as advisory/future guidance, not a hard blocker
+- [ ] 9.6 Keep placeholder/offline file behavior out of MVP implementation scope
+- [ ] 9.7 Create/update tests for stale path and sort-start validation behavior
 
-## 10. Startup Prerequisite Checks
+## 10. Integration and Testing
 
-- [ ] 10.1 Implement iCloud for Windows installation detection
-- [ ] 10.2 Add iCloud Photos folder existence validation
-- [ ] 10.3 Provide user guidance when prerequisites are missing
-- [ ] 10.4 Allow user to confirm or override iCloud Photos folder path
-- [ ] 10.5 Store confirmed folder path in settings
-- [ ] 10.6 Validate folder accessibility before starting sort jobs
+- [ ] 10.1 Wire new sorting modules into the existing `AlbumsService` / `ICloudService` sort path
+- [ ] 10.2 Verify album browsing remains lightweight and does not trigger local scanning or asset-level fetches
+- [ ] 10.3 Verify sorting scans/matches only after sort start
+- [ ] 10.4 Validate recursive re-sort behavior with moved files and tracked copies
+- [ ] 10.5 Validate large-job cancellation behavior with partial state persisted
+- [ ] 10.6 Validate JSON persistence across application restarts
+- [ ] 10.7 Run Python test suite and update existing mock-progress expectations
 
-## 11. Integration and Testing
+## 11. Documentation and Cleanup
 
-- [ ] 11.1 Wire up all new modules in the application startup sequence
-- [ ] 11.2 Ensure proper dependency injection and module imports
-- [ ] 11.3 Run end-to-end testing of the sort workflow
-- [ ] 11.4 Verify bridge communication between Python and frontend
-- [ ] 11.5 Test JSON persistence across application restarts
-- [ ] 11.6 Validate multi-album behavior with test datasets
-
-## 12. Documentation and Cleanup
-
-- [ ] 12.1 Update README with new functionality description
-- [ ] 12.2 Add inline comments and docstrings to new code
-- [ ] 12.3 Ensure code follows existing project style and conventions
-- [ ] 12.4 Run any existing linters or formatters on new code
-- [ ] 12.5 Review and remove any temporary debugging code
+- [ ] 11.1 Update README or user-facing docs for real sorting behavior
+- [ ] 11.2 Document that copy mode can require significant storage and may trigger downloads
+- [ ] 11.3 Document cancellation semantics: cancel is not undo
+- [ ] 11.4 Document placeholder/offline reconciliation as future investigation, not MVP behavior
+- [ ] 11.5 Ensure code follows existing project style and conventions
+- [ ] 11.6 Review and remove temporary/debug sorting code
