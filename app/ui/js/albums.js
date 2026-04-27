@@ -1,6 +1,9 @@
 let sortTimer = null;
 let sortState = 'idle';
 let sortPollInFlight = false;
+let currentSortJobId = null;
+
+const TERMINAL_SORT_STATUSES = new Set(['complete', 'cancelled', 'error']);
 
 export async function loadAlbums() {
   document.getElementById('status').textContent = 'Loading albums...';
@@ -119,6 +122,8 @@ export async function startSort() {
       throw new Error(result?.error || 'Failed to start sort');
     }
 
+    currentSortJobId = result.job_id;
+
     if (sortTimer) {
       clearInterval(sortTimer);
     }
@@ -133,30 +138,17 @@ export async function startSort() {
         const progress = await globalThis.pywebview.api.get_sort_progress(result.job_id);
         setSortProgress(progress);
 
-        if (progress.status === 'complete' || progress.status === 'error') {
-          clearInterval(sortTimer);
-          sortTimer = null;
-          downloadButton.dataset.sorting = 'false';
-          setSortControls(false);
-          setCheckboxesDisabled(false);
-          sortState = progress.status;
-          clearSelections();
-          updateSelection();
+        if (TERMINAL_SORT_STATUSES.has(progress.status)) {
+          finishSort(progress.status);
         }
       } catch (error) {
-        clearInterval(sortTimer);
-        sortTimer = null;
-        downloadButton.dataset.sorting = 'false';
-        setSortControls(false);
-        setCheckboxesDisabled(false);
         sortState = 'error';
-        clearSelections();
+        finishSort('error');
         setSortProgress({
           percent: 0,
           message: 'Failed to fetch sort progress.',
           status: 'error',
         });
-        updateSelection();
         console.error(error);
       } finally {
         sortPollInFlight = false;
@@ -164,6 +156,7 @@ export async function startSort() {
     }, 500);
   } catch (error) {
     downloadButton.dataset.sorting = 'false';
+    currentSortJobId = null;
     setSortControls(false);
     setCheckboxesDisabled(false);
     sortState = 'error';
@@ -238,8 +231,29 @@ function clearSelections() {
 }
 
 export function cancelSort() {
-  // TODO: Wire this to a real backend cancel endpoint once cancellation is supported.
-  console.log('Cancel sort requested, but backend cancellation is not implemented yet.');
+  if (!globalThis.pywebview?.api || !currentSortJobId) {
+    return;
+  }
+
+  const cancelButton = document.getElementById('cancel-btn');
+  cancelButton.disabled = true;
+
+  return globalThis.pywebview.api.cancel_sort(currentSortJobId)
+    .then((progress) => {
+      setSortProgress(progress);
+      if (TERMINAL_SORT_STATUSES.has(progress.status)) {
+        finishSort(progress.status);
+      }
+    })
+    .catch((error) => {
+      console.error(error);
+      setSortProgress({
+        percent: 0,
+        message: 'Failed to cancel sort.',
+        status: 'error',
+      });
+      finishSort('error');
+    });
 }
 
 function setSortControls(isSorting) {
@@ -248,6 +262,24 @@ function setSortControls(isSorting) {
 
   downloadButton.hidden = isSorting;
   cancelButton.hidden = !isSorting;
+  cancelButton.disabled = false;
+}
+
+function finishSort(status) {
+  const downloadButton = document.getElementById('download-btn');
+
+  if (sortTimer) {
+    clearInterval(sortTimer);
+    sortTimer = null;
+  }
+
+  downloadButton.dataset.sorting = 'false';
+  currentSortJobId = null;
+  setSortControls(false);
+  setCheckboxesDisabled(false);
+  sortState = status;
+  clearSelections();
+  updateSelection();
 }
 
 function normalizeAlbumResult(result) {

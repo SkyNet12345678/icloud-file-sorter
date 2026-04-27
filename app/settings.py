@@ -11,9 +11,7 @@ SETTINGS_FILENAME = "settings.json"
 ICLOUD_SESSIONS_DIRNAME = "icloud-sessions"
 
 WINDOWS_KNOWN_PATHS = [
-    Path(os.environ.get("USERPROFILE", "")) / "Pictures" / "iCloud Photos",
-    Path(os.environ.get("USERPROFILE", "")) / "Apple Cloud" / "Pictures",
-    Path(os.environ.get("USERPROFILE", "")) / "Pictures" / "iCloud Photos",
+    Path(os.environ.get("USERPROFILE", "")) / "Pictures" / "iCloud Photos" / "Photos",
 ]
 
 
@@ -31,6 +29,15 @@ def _detect_source_folder() -> str | None:
             logger.info("Auto-detected source folder: %s", path)
             return str(path)
     return None
+
+
+def _normalize_source_folder(path: str | Path) -> str:
+    source_path = Path(path)
+    photos_child = source_path / "Photos"
+    if source_path.name.casefold() == "icloud photos" and photos_child.exists() and photos_child.is_dir():
+        logger.info("Using iCloud Photos child source folder: %s", photos_child)
+        return str(photos_child)
+    return str(source_path)
 
 
 class SettingsService:
@@ -86,7 +93,11 @@ class SettingsService:
     def get_source_folder(self) -> str | None:
         source_folder = self._settings.get("source_folder")
         if source_folder is not None and str(source_folder).strip():
-            return str(source_folder)
+            normalized_source_folder = _normalize_source_folder(str(source_folder))
+            if normalized_source_folder != str(source_folder):
+                self._settings["source_folder"] = normalized_source_folder
+                self.save()
+            return normalized_source_folder
 
         detected = _detect_source_folder()
         if detected:

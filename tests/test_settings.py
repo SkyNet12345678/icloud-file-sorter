@@ -69,6 +69,41 @@ def test_get_source_folder_autodetects_when_configured_path_is_blank(
     assert saved_settings["source_folder"] == str(detected_source_folder)
 
 
+def test_default_windows_source_folder_points_to_icloud_photos_photos_folder():
+    assert settings_module.WINDOWS_KNOWN_PATHS[0].parts[-3:] == (
+        "Pictures",
+        "iCloud Photos",
+        "Photos",
+    )
+
+
+def test_get_source_folder_migrates_configured_icloud_photos_parent_to_photos_child(
+    tmp_path,
+):
+    settings_dir = tmp_path / "settings"
+    settings_dir.mkdir()
+    icloud_photos_parent = tmp_path / "Pictures" / "iCloud Photos"
+    photos_child = icloud_photos_parent / "Photos"
+    photos_child.mkdir(parents=True)
+    settings_file = settings_dir / SETTINGS_FILENAME
+    settings_file.write_text(
+        json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "source_folder": str(icloud_photos_parent),
+                "sorting_approach": "first",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    service = SettingsService(settings_dir=settings_dir)
+
+    assert service.get_source_folder() == str(photos_child)
+    saved_settings = json.loads(settings_file.read_text(encoding="utf-8"))
+    assert saved_settings["source_folder"] == str(photos_child)
+
+
 def test_remembered_apple_id_is_normalized_and_persisted(tmp_path):
     service = SettingsService(settings_dir=tmp_path)
 

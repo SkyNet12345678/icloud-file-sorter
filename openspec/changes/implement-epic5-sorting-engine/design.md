@@ -33,6 +33,7 @@ Based on the PROJECT-OVERVIEW.md and ICLOUD-SORTER-EPIC4-PLAN.md, we have establ
 - Supporting two-way sync back to iCloud
 - Implementing advanced metadata-based matching (EXIF, file hashes) for MVP
 - Creating a separate target directory for sorted files; sorting happens in-place within the configured iCloud Photos folder
+- Treating `C:\Users\USER\Pictures\iCloud Photos` as the sortable source root on Windows; the sortable iCloud Photos source root is its `Photos` child folder
 - Implementing pause/resume controls; re-running a sort should be safe due to recursive scanning and persisted state
 - Detecting or specially handling iCloud placeholder files for MVP
 - Treating iCloud for Windows installation detection as a hard prerequisite when the configured source folder is accessible
@@ -59,6 +60,7 @@ Based on the PROJECT-OVERVIEW.md and ICLOUD-SORTER-EPIC4-PLAN.md, we have establ
 - App-created copies must not create future ambiguous matches.
 **Implementation:**
 - Build the local filename index recursively from the configured source folder.
+- On Windows, the default configured source folder should be `C:\Users\USER\Pictures\iCloud Photos\Photos`, not the parent `C:\Users\USER\Pictures\iCloud Photos` directory.
 - Treat moved files as canonical candidates wherever they currently live.
 - Track app-created copy paths in sort state and exclude existing tracked copies from future matching.
 - Treat persisted paths as advisory: missing tracked paths are ignored or cleaned up, not fatal.
@@ -90,6 +92,7 @@ Based on the PROJECT-OVERVIEW.md and ICLOUD-SORTER-EPIC4-PLAN.md, we have establ
 - Album ID is identity.
 - Album name is display text.
 - Folder name/path is derived once and persisted in sort state or managed mapping state.
+- Folder paths are always re-anchored under the current configured source folder when mappings are built; persisted mappings preserve stable `folder_name`, not an arbitrary historical parent path.
 - Illegal Windows characters, reserved names, trailing spaces/dots, and overly long names are sanitized.
 - Duplicate sanitized folder names receive deterministic suffixes such as ` (2)` while preserving album ID mapping.
 - If an album is later renamed in iCloud, keep the existing folder mapping for MVP; managed folder rename can be future work.
@@ -157,8 +160,11 @@ Based on the PROJECT-OVERVIEW.md and ICLOUD-SORTER-EPIC4-PLAN.md, we have establ
 - Folder access is the actual requirement for local file operations.
 **Implementation:**
 - Auto-detect common iCloud Photos paths only when no source folder is configured.
+- The preferred Windows auto-detected source folder is `C:\Users\USER\Pictures\iCloud Photos\Photos`.
+- If a previously configured source folder points at the parent `C:\Users\USER\Pictures\iCloud Photos` and its `Photos` child exists, normalize and persist the child path because the parent folder is not the sortable photo root.
 - Preserve a configured path even if it later becomes stale; do not silently switch to a newly detected folder.
 - Before starting file operations, verify the source folder exists, is a directory, is readable, and can contain destination album folders.
+- Album destination folders must be created inside the configured source folder. For example, if the source folder is `C:\Users\mac\Pictures\iCloud Photos\Photos`, album `Trips` maps to `C:\Users\mac\Pictures\iCloud Photos\Photos\Trips`.
 - If validation fails, perform no file operations and return clear guidance.
 - iCloud for Windows install detection is advisory/future guidance only for MVP.
 - Placeholder/offline reconciliation behavior is ignored for MVP and should be investigated later.

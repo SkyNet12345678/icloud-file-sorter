@@ -1,11 +1,13 @@
 import base64
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from app.scanner import LocalScanner
+from app.sorting.file_operations import STATUS_READY, validate_destination_folder
 from app.sorting.sort_job import SortJobManager
 from app.state.sort_state import SortStateStore
 
@@ -1140,6 +1142,16 @@ class ICloudService:
         if not source_path.is_dir():
             raise RuntimeError(
                 "Configured source folder is not a folder. Update the source folder in Settings before starting a sort."
+            )
+        if not os.access(source_path, os.R_OK):
+            raise RuntimeError(
+                "Configured source folder cannot be read. Check folder permissions in Windows and update Settings if needed."
+            )
+
+        write_check = validate_destination_folder(source_path)
+        if write_check["status"] != STATUS_READY:
+            raise RuntimeError(
+                "Configured source folder cannot be written to. Choose a writable iCloud Photos folder in Settings before starting a sort."
             )
 
         return str(source_path)

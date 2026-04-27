@@ -46,7 +46,7 @@ def build_album_folder_mappings(
     existing_mappings = existing_mappings or {}
     mappings: dict[str, dict] = {}
     used_folder_names: set[str] = {
-        str(mapping["folder_name"]).casefold()
+        _safe_folder_name(mapping["folder_name"]).casefold()
         for mapping in existing_mappings.values()
         if isinstance(mapping, dict) and mapping.get("folder_name")
     }
@@ -60,15 +60,14 @@ def build_album_folder_mappings(
         existing_mapping = existing_mappings.get(album_id)
 
         if isinstance(existing_mapping, dict) and existing_mapping.get("folder_name"):
-            folder_name = str(existing_mapping["folder_name"])
-            folder_path = str(existing_mapping.get("folder_path") or source_path / folder_name)
+            folder_name = _safe_folder_name(existing_mapping["folder_name"])
             mapping = dict(existing_mapping)
             mapping.update(
                 {
                     "album_id": album_id,
                     "album_name": album_name,
                     "folder_name": folder_name,
-                    "folder_path": folder_path,
+                    "folder_path": str(source_path / folder_name),
                 }
             )
         else:
@@ -113,6 +112,10 @@ def _album_value(album: dict, key: str):
     if isinstance(album, dict):
         return album.get(key)
     return getattr(album, key, None)
+
+
+def _safe_folder_name(folder_name: str) -> str:
+    return sanitize_album_folder_name(Path(str(folder_name)).name)
 
 
 def _dedupe_folder_name(

@@ -15,7 +15,8 @@ Use the planning files like this:
 - use JSON persistence, not SQLite
 - keep album browsing lightweight
 - perform expensive iCloud asset metadata fetch, local file scanning, and cloud-to-local matching only when sorting starts
-- sort inside the iCloud Photos folder for the current MVP direction
+- sort inside the configured iCloud Photos `Photos` folder for the current MVP direction
+- on Windows, default the source folder to `C:\Users\USER\Pictures\iCloud Photos\Photos`; do not use the parent `iCloud Photos` folder as the sortable root
 - publish release artifacts to S3 and provide downloads through a simple website
 
 ## Current Epic Status
@@ -91,7 +92,7 @@ Scope:
 - remove the temporary "Test Asset Fetch" button added in Epic 3 Phase 5
 - fetch per-asset metadata from iCloud only after the user starts sorting selected albums
 - aggregate asset metadata across the selected albums and preserve ordered album memberships
-- scan the local iCloud Photos folder when the user starts sorting
+- scan the configured local source folder when the user starts sorting; on Windows this defaults to `C:\Users\USER\Pictures\iCloud Photos\Photos`
 - build a fast filename index for the local folder
 - match by filename only for MVP
 - handle filename collisions and ambiguity explicitly
@@ -115,7 +116,8 @@ Status: planned
 
 Scope:
 
-- create album subfolders inside the iCloud Photos folder
+- create album subfolders inside the configured source folder, normally `C:\Users\USER\Pictures\iCloud Photos\Photos` on Windows
+- never move/copy album output to the parent `C:\Users\USER\Pictures` or `C:\Users\USER\Pictures\iCloud Photos` folder
 - move matched files into those folders for the current MVP direction
 - define the behavior for files that belong to multiple albums
 - default MVP behavior: move the asset into the first selected album folder
@@ -128,6 +130,7 @@ Scope:
 Corrections applied to the CSV:
 
 - the current product direction does not use a separate target directory for MVP
+- the current product direction treats `C:\Users\USER\Pictures\iCloud Photos\Photos` as the sortable iCloud Photos root on Windows
 - replace database records with JSON-backed sort history/state
 
 ## Epic 6: Settings & User Preferences
@@ -137,7 +140,10 @@ Status: planned
 Scope:
 
 - source folder setting with auto-detect plus manual override
-- startup prerequisite detection for iCloud for Windows installation and folder presence
+- source auto-detection should prefer `C:\Users\USER\Pictures\iCloud Photos\Photos` on Windows
+- if a configured path points at the parent `C:\Users\USER\Pictures\iCloud Photos` and its `Photos` child exists, normalize settings to the child path
+- sort-start validation for source folder existence, directory status, readability, and write capability
+- advisory startup guidance for iCloud for Windows installation and folder presence
 - sort behavior options such as move/copy and multi-album handling
 - include an MVP multi-album mode setting with `move_first_selected_album` as the default and `copy_to_each_album` as the initial alternative
 - settings UI

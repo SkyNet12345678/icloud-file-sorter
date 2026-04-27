@@ -69,23 +69,23 @@
 
 ## 8. Python Bridge and Frontend Wiring
 
-- [ ] 8.1 Update `start_sort(selected_album_ids)` to start the real sort job and return a job ID
-- [ ] 8.2 Update `get_sort_progress(job_id)` to return real progress, counts, skipped/error summaries, and terminal statuses
-- [ ] 8.3 Add `cancel_sort(job_id)` bridge method
-- [ ] 8.4 Wire the existing frontend Cancel button to `cancel_sort(job_id)`
-- [ ] 8.5 Preserve bridge compatibility for existing album selection and progress polling
-- [ ] 8.6 Ensure settings UI continues using existing `source_folder` and `sorting_approach` values
-- [ ] 8.7 Create/update tests for bridge interactions and frontend cancel behavior where practical
+- [x] 8.1 Update `start_sort(selected_album_ids)` to start the real sort job and return a job ID
+- [x] 8.2 Update `get_sort_progress(job_id)` to return real progress, counts, skipped/error summaries, and terminal statuses
+- [x] 8.3 Add `cancel_sort(job_id)` bridge method
+- [x] 8.4 Wire the existing frontend Cancel button to `cancel_sort(job_id)`
+- [x] 8.5 Preserve bridge compatibility for existing album selection and progress polling
+- [x] 8.6 Ensure settings UI continues using existing `source_folder` and `sorting_approach` values
+- [x] 8.7 Create/update tests for bridge interactions and frontend cancel behavior where practical
 
 ## 9. Source Folder Validation
 
-- [ ] 9.1 Keep auto-detection limited to cases where no source folder is configured
-- [ ] 9.2 Preserve stale configured paths instead of silently replacing them with a newly detected path
-- [ ] 9.3 Validate source folder existence, directory status, readability, and destination write capability before file operations
-- [ ] 9.4 Return clear guidance when source-folder validation fails
-- [ ] 9.5 Treat iCloud for Windows installation detection as advisory/future guidance, not a hard blocker
-- [ ] 9.6 Keep placeholder/offline file behavior out of MVP implementation scope
-- [ ] 9.7 Create/update tests for stale path and sort-start validation behavior
+- [x] 9.1 Keep auto-detection limited to cases where no source folder is configured
+- [x] 9.2 Preserve stale configured paths instead of silently replacing them with a newly detected path
+- [x] 9.3 Validate source folder existence, directory status, readability, and destination write capability before file operations
+- [x] 9.4 Return clear guidance when source-folder validation fails
+- [x] 9.5 Treat iCloud for Windows installation detection as advisory/future guidance, not a hard blocker
+- [x] 9.6 Keep placeholder/offline file behavior out of MVP implementation scope
+- [x] 9.7 Create/update tests for stale path and sort-start validation behavior
 
 ## 10. Integration and Testing
 

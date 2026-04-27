@@ -7,6 +7,7 @@ The system SHALL implement a sorting engine that organizes local files into albu
 - **WHEN** the user starts a sort job for selected albums
 - **THEN** the system SHALL scan the configured local iCloud Photos source folder recursively for files matching assets in those albums
 - **AND** the system SHALL create Windows-safe album-named subfolders within the configured source folder
+- **AND** on Windows the default configured source folder SHALL be the sortable `C:\Users\USER\Pictures\iCloud Photos\Photos` folder, not its parent `C:\Users\USER\Pictures\iCloud Photos`
 - **AND** the system SHALL move or copy matched files into the appropriate album folders based on the existing `sorting_approach` setting
 - **AND** the system SHALL keep local filesystem scanning, matching, and sorting inside the active sort job lifecycle
 
@@ -41,6 +42,12 @@ The system SHALL map iCloud albums to stable Windows-safe destination folders.
 - **AND** the iCloud album display name changes
 - **THEN** the system SHALL continue using the existing folder mapping for MVP
 - **AND** the system SHALL NOT rename existing managed folders automatically
+
+#### Scenario: Keep album folders inside the configured source folder
+- **WHEN** the system builds or reloads album folder mappings
+- **THEN** each album `folder_path` SHALL be rooted inside the current configured source folder
+- **AND** persisted mappings SHALL preserve stable `folder_name` values rather than preserving arbitrary historical parent paths
+- **AND** if the source folder is `C:\Users\mac\Pictures\iCloud Photos\Photos`, album `Trips` SHALL map to `C:\Users\mac\Pictures\iCloud Photos\Photos\Trips`
 
 ### Requirement: Non-Interactive Destination Conflict Handling
 The system SHALL handle destination conflicts and no-op operations without prompting during a bulk sort.
@@ -98,6 +105,12 @@ The system SHALL validate the configured source folder before performing file op
 - **THEN** the system SHALL preserve the configured value
 - **AND** the system SHALL NOT silently replace it with another auto-detected folder
 - **AND** sort-start validation SHALL report that the configured folder was not found
+
+#### Scenario: Normalize configured iCloud Photos parent folder
+- **WHEN** a configured source folder points at `C:\Users\USER\Pictures\iCloud Photos`
+- **AND** `C:\Users\USER\Pictures\iCloud Photos\Photos` exists as a directory
+- **THEN** the system SHALL normalize and persist the source folder as `C:\Users\USER\Pictures\iCloud Photos\Photos`
+- **AND** this normalization SHALL NOT permit sorting album folders outside the `Photos` source folder
 
 #### Scenario: iCloud installation detection is advisory
 - **WHEN** the configured source folder is accessible and writable
