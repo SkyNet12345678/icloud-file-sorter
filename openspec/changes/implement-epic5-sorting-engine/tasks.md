@@ -27,12 +27,12 @@
 
 ## 4. Matching Extension for Recursive Re-Sort
 
-- [ ] 4.1 Extend matching/indexing to suppress existing app-created copy paths from candidate matches
-- [ ] 4.2 Preserve moved files as valid recursive match candidates wherever they currently live
-- [ ] 4.3 Preserve ambiguous handling for multiple untracked same-filename candidates
-- [ ] 4.4 Preserve unmatched handling when no local candidate exists
-- [ ] 4.5 Add tests proving app-created copies do not create future ambiguity
-- [ ] 4.6 Add tests proving moved files in album folders remain matchable on later sorts
+- [x] 4.1 Extend matching/indexing to suppress existing app-created copy paths from candidate matches
+- [x] 4.2 Preserve moved files as valid recursive match candidates wherever they currently live
+- [x] 4.3 Preserve ambiguous handling for multiple untracked same-filename candidates
+- [x] 4.4 Preserve unmatched handling when no local candidate exists
+- [x] 4.5 Add tests proving app-created copies do not create future ambiguity
+- [x] 4.6 Add tests proving moved files in album folders remain matchable on later sorts
 
 ## 5. Safe File Operations
 

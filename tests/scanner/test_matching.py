@@ -128,6 +128,42 @@ def test_match_assets_returns_ambiguous_when_duplicate_filenames_exist(tmp_path)
     ]
 
 
+def test_match_assets_ignores_tracked_app_created_copy_candidates(tmp_path):
+    source_file = tmp_path / "IMG_SHARED.HEIC"
+    source_file.write_text("source", encoding="utf-8")
+    album_dir = tmp_path / "Trips"
+    album_dir.mkdir()
+    tracked_copy = album_dir / "IMG_SHARED.HEIC"
+    tracked_copy.write_text("copy", encoding="utf-8")
+
+    scanner = LocalScanner(tmp_path, ignored_paths={str(tracked_copy)})
+    scanner.scan()
+
+    result = scanner.match_assets([build_asset("asset-1", "IMG_SHARED.HEIC")])
+
+    assert result["matched"] == 1
+    assert result["ambiguous"] == 0
+    assert result["assets"][0]["local_path"] == str(source_file)
+    assert result["assets"][0]["match_type"] == "exact"
+
+
+def test_match_assets_keeps_moved_album_file_as_recursive_candidate(tmp_path):
+    album_dir = tmp_path / "Trips"
+    album_dir.mkdir()
+    moved_file = album_dir / "IMG_MOVED.HEIC"
+    moved_file.write_text("moved", encoding="utf-8")
+
+    scanner = LocalScanner(tmp_path)
+    scanner.scan()
+
+    result = scanner.match_assets([build_asset("asset-1", "IMG_MOVED.HEIC")])
+
+    assert result["matched"] == 1
+    assert result["ambiguous"] == 0
+    assert result["assets"][0]["local_path"] == str(moved_file)
+    assert result["assets"][0]["match_type"] == "exact"
+
+
 def test_match_assets_never_introduces_automatic_fallback_match_type(tmp_path):
     local_file = tmp_path / "IMG_0001.HEIC"
     local_file.write_text("content", encoding="utf-8")
