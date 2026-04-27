@@ -69,6 +69,49 @@ def test_build_album_folder_mappings_preserves_existing_album_id_mapping(tmp_pat
     assert mappings["album-2"]["folder_name"] == "Trips"
 
 
+def test_build_album_folder_mappings_reanchors_existing_paths_inside_source_folder(tmp_path):
+    source_folder = tmp_path / "Pictures" / "iCloud Photos" / "Photos"
+    old_parent = tmp_path / "Pictures"
+    existing = {
+        "album-1": {
+            "album_id": "album-1",
+            "album_name": "Trips",
+            "folder_name": "Trips",
+            "folder_path": str(old_parent / "Trips"),
+        }
+    }
+
+    mappings = build_album_folder_mappings(
+        source_folder,
+        [{"id": "album-1", "name": "Trips"}],
+        existing_mappings=existing,
+    )
+
+    assert mappings["album-1"]["folder_name"] == "Trips"
+    assert mappings["album-1"]["folder_path"] == str(source_folder / "Trips")
+
+
+def test_build_album_folder_mappings_sanitizes_existing_folder_names_before_joining(tmp_path):
+    source_folder = tmp_path / "Pictures" / "iCloud Photos" / "Photos"
+    existing = {
+        "album-1": {
+            "album_id": "album-1",
+            "album_name": "Trips",
+            "folder_name": str(tmp_path / "Pictures" / "Trips"),
+            "folder_path": str(tmp_path / "Pictures" / "Trips"),
+        }
+    }
+
+    mappings = build_album_folder_mappings(
+        source_folder,
+        [{"id": "album-1", "name": "Trips"}],
+        existing_mappings=existing,
+    )
+
+    assert mappings["album-1"]["folder_name"] == "Trips"
+    assert mappings["album-1"]["folder_path"] == str(source_folder / "Trips")
+
+
 def test_build_album_folder_mappings_reserves_unselected_existing_mappings(tmp_path):
     existing = {
         "album-1": {
