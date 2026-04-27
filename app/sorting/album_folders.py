@@ -45,7 +45,11 @@ def build_album_folder_mappings(
     source_path = Path(source_folder)
     existing_mappings = existing_mappings or {}
     mappings: dict[str, dict] = {}
-    used_folder_names: set[str] = set()
+    used_folder_names: set[str] = {
+        str(mapping["folder_name"]).casefold()
+        for mapping in existing_mappings.values()
+        if isinstance(mapping, dict) and mapping.get("folder_name")
+    }
 
     for album in albums:
         album_id = _album_value(album, "album_id") or _album_value(album, "id")
@@ -92,10 +96,16 @@ def build_album_folder_mappings(
 
 def persist_album_folder_mappings(state: dict, mappings: dict) -> dict:
     updated_state = normalize_sort_state(state)
-    updated_state["album_folder_mappings"] = {
+    updated_mappings = {
+        str(album_id): dict(mapping)
+        for album_id, mapping in updated_state["album_folder_mappings"].items()
+        if isinstance(mapping, dict)
+    }
+    updated_mappings.update({
         str(album_id): dict(mapping)
         for album_id, mapping in mappings.items()
-    }
+    })
+    updated_state["album_folder_mappings"] = updated_mappings
     return updated_state
 
 
