@@ -89,13 +89,13 @@
 
 ## 10. Integration and Testing
 
-- [ ] 10.1 Wire new sorting modules into the existing `AlbumsService` / `ICloudService` sort path
-- [ ] 10.2 Verify album browsing remains lightweight and does not trigger local scanning or asset-level fetches
-- [ ] 10.3 Verify sorting scans/matches only after sort start
-- [ ] 10.4 Validate recursive re-sort behavior with moved files and tracked copies
-- [ ] 10.5 Validate large-job cancellation behavior with partial state persisted
-- [ ] 10.6 Validate JSON persistence across application restarts
-- [ ] 10.7 Run Python test suite and update existing mock-progress expectations
+- [x] 10.1 Wire new sorting modules into the existing `AlbumsService` / `ICloudService` sort path
+- [x] 10.2 Verify album browsing remains lightweight and does not trigger local scanning or asset-level fetches
+- [x] 10.3 Verify sorting scans/matches only after sort start
+- [x] 10.4 Validate recursive re-sort behavior with moved files and tracked copies
+- [x] 10.5 Validate large-job cancellation behavior with partial state persisted
+- [x] 10.6 Validate JSON persistence across application restarts
+- [x] 10.7 Run Python test suite and update existing mock-progress expectations
 
 ## 11. Documentation and Cleanup
 
