@@ -31,11 +31,31 @@ python -m app.main # or python3 if needed
 
 ### Prerequisites
 
-TODO
+- Windows with iCloud for Windows syncing Photos locally.
+- Python 3.11+ for local development.
+- An accessible iCloud Photos source folder. On Windows, the sortable default is `C:\Users\USER\Pictures\iCloud Photos\Photos`, not the parent `iCloud Photos` folder.
+- Local files must already be available in the configured source folder. The app reads album metadata from iCloud, then matches local files by filename.
 
 ## Usage
- 
-TODO
+
+1. Start the desktop app with `python -m app.main`.
+2. Sign in with your Apple ID. Complete 2FA if iCloud requires it.
+3. Open settings and confirm the source folder points at the local iCloud Photos `Photos` folder.
+4. Choose the sorting approach.
+5. Select albums and start sorting.
+
+Sorting approaches:
+
+- `first`: move each matched file into the first selected album folder.
+- `copy`: copy each matched file into every selected album folder while leaving the source file in place.
+
+Sorting creates album-named folders inside the configured source folder only. For example, `C:\Users\mac\Pictures\iCloud Photos\Photos\Trips`.
+
+Album folder names are sanitized for Windows path rules. Destination files are never overwritten automatically. Existing conflicts, ambiguous filename matches, missing local files, and filesystem errors are skipped and reported in progress details.
+
+Copy mode can require significant additional storage for large libraries. It may also cause iCloud for Windows to download files if placeholders are encountered. Placeholder/offline reconciliation is future investigation work, not current MVP behavior.
+
+Cancel stops after the current file operation finishes. It is not undo: files already moved or copied remain where they are. Later sorts are safe to run again because the app scans recursively and tracks app-created copies in JSON state.
 
 ## Run tests
 

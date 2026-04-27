@@ -86,7 +86,11 @@ def test_sort_job_copy_mode_preserves_source_and_tracks_created_copy_paths(tmp_p
         str(tmp_path / "Favorites" / "IMG_SHARED.HEIC"),
     ]
 
-    manager.start_job(
+    restarted_manager = SortJobManager(
+        state_store=SortStateStore(app_data_dir=tmp_path / "state"),
+        run_async=False,
+    )
+    restarted_manager.start_job(
         job_id="job-copy-rerun",
         selected_album_ids=["album-1", "album-2"],
         selected_albums=selected_albums(),
@@ -97,15 +101,16 @@ def test_sort_job_copy_mode_preserves_source_and_tracks_created_copy_paths(tmp_p
         ),
     )
 
-    rerun_progress = manager.get_progress("job-copy-rerun")
-    rerun_state = store.load()
+    rerun_progress = restarted_manager.get_progress("job-copy-rerun")
+    rerun_state = restarted_manager.state_store.load()
 
     assert rerun_progress["summary"]["already_copied"] == 2
     assert rerun_state["processed_assets"]["asset-1"]["app_created_copy_paths"] == copy_paths
 
 
-def test_sort_job_cancel_stops_after_current_operation_and_persists_state(tmp_path):
-    for index in range(3):
+def test_sort_job_cancel_stops_after_current_operation_and_persists_large_job_state(tmp_path):
+    asset_count = 25
+    for index in range(asset_count):
         (tmp_path / f"IMG_000{index}.HEIC").write_text(str(index), encoding="utf-8")
 
     manager = None
@@ -129,7 +134,7 @@ def test_sort_job_cancel_stops_after_current_operation_and_persists_state(tmp_pa
         asset_loader=lambda: asset_result(
             [
                 asset(f"asset-{index}", f"IMG_000{index}.HEIC", ["album-1"])
-                for index in range(3)
+                for index in range(asset_count)
             ]
         ),
     )
@@ -139,7 +144,7 @@ def test_sort_job_cancel_stops_after_current_operation_and_persists_state(tmp_pa
 
     assert progress["status"] == JOB_STATUS_CANCELLED
     assert progress["processed"] == 1
-    assert progress["summary"]["remaining"] == 2
+    assert progress["summary"]["remaining"] == asset_count - 1
     assert state["jobs"]["job-cancel"]["status"] == JOB_STATUS_CANCELLED
     assert state["active_job_id"] is None
     assert (tmp_path / "Trips" / "IMG_0000.HEIC").exists()

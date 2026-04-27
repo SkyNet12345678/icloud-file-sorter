@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from app import settings as settings_module
 from app.icloud.albums_service import AlbumsService
 from app.icloud.icloud_service import ICloudService
+from app.scanner import LocalScanner
 from app.settings import SettingsService
 from app.sorting.sort_job import SortJobManager
 
@@ -79,6 +80,41 @@ def test_get_albums_keeps_album_browsing_lightweight():
         }
     ]
     assert album.asset_request_count == 0
+
+
+def test_local_scanning_happens_only_after_sort_start(tmp_path, monkeypatch):
+    scan_count = 0
+
+    class CountingScanner(LocalScanner):
+        def scan(self):
+            nonlocal scan_count
+            scan_count += 1
+            return super().scan()
+
+    monkeypatch.setattr("app.sorting.sort_job.LocalScanner", CountingScanner)
+    (tmp_path / "IMG_001.HEIC").write_text("asset-1", encoding="utf-8")
+    album = FakeAlbum(
+        "album-1",
+        "Vacation 2025",
+        [FakeAsset(id="asset-1", filename="IMG_001.HEIC", media_type="image")],
+    )
+    service = ICloudService(
+        api=SimpleNamespace(photos=SimpleNamespace(albums=[album])),
+        settings_service=FakeSettingsService(tmp_path),
+        sort_job_manager=SortJobManager(run_async=False),
+    )
+
+    album_result = service.get_albums()
+
+    assert album_result["success"] is True
+    assert scan_count == 0
+    assert album.asset_request_count == 0
+
+    sort_result = service.start_sort(["album-1"])
+
+    assert "job_id" in sort_result
+    assert scan_count == 1
+    assert album.asset_request_count == 1
 
 
 def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):

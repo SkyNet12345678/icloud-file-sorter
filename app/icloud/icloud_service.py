@@ -6,14 +6,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from app.scanner import LocalScanner
 from app.sorting.file_operations import STATUS_READY, validate_destination_folder
 from app.sorting.sort_job import SortJobManager
 from app.state.sort_state import SortStateStore
 
 logger = logging.getLogger("icloud-sorter")
 
-DEFAULT_MOCK_SORT_TOTAL = 1847
 FAILED_TO_LOAD_ALBUM_ASSETS = "Failed to load album assets"
 
 
@@ -446,13 +444,6 @@ class ICloudService:
             unique_ids.append(normalized_id)
 
         return unique_ids
-
-    def _resolve_selected_album_names(self, selected_album_ids):
-        return [
-            self.album_summaries_by_id[album_id]["name"]
-            for album_id in selected_album_ids
-            if album_id in self.album_summaries_by_id
-        ]
 
     def _resolve_selected_album_records(self, selected_album_ids):
         return [
@@ -988,141 +979,6 @@ class ICloudService:
                 for membership in asset["album_memberships"]
             ],
         }
-
-    def _copy_job_progress(self, job):
-        progress_keys = (
-            "job_id",
-            "status",
-            "processed",
-            "total",
-            "percent",
-            "message",
-        )
-        progress = {
-            key: job[key]
-            for key in progress_keys
-        }
-        progress["match_results"] = self._copy_match_results_summary(
-            job.get("match_results")
-        )
-        return progress
-
-    def _advance_matching_job(self, job):
-        if not job.get("_matching_reported"):
-            job["_matching_reported"] = True
-            return self._copy_job_progress(job)
-
-        if not job.get("_matching_prepared"):
-            if job.get("_matching_fetch_in_progress"):
-                return self._copy_job_progress(job)
-
-            job["_matching_fetch_in_progress"] = True
-            try:
-                asset_result = self.get_assets_for_album_ids(
-                    job["selected_album_ids"],
-                    force_refresh=True,
-                )
-            finally:
-                job["_matching_fetch_in_progress"] = False
-
-            if not asset_result.get("success"):
-                job["status"] = "error"
-                job["processed"] = 0
-                job["total"] = 0
-                job["percent"] = 0
-                job["message"] = asset_result.get("error") or FAILED_TO_LOAD_ALBUM_ASSETS
-                return self._copy_job_progress(job)
-
-            selected_assets = asset_result["assets"]
-            job["selected_assets"] = selected_assets
-            job["processed"] = 0
-            job["total"] = len(selected_assets)
-            job["percent"] = 0
-            job["message"] = self._build_matching_message(selected_assets)
-            job["_matching_prepared"] = True
-            return self._copy_job_progress(job)
-
-        if not job.get("_matching_completed"):
-            try:
-                scanner = LocalScanner(job["source_folder"])
-                scanner.scan()
-                job["match_results"] = scanner.match_assets(job["selected_assets"])
-                job["matched_assets"] = [
-                    dict(asset)
-                    for asset in job["match_results"]["assets"]
-                ]
-            except Exception as exc:
-                logger.exception("Failed to match local files for job %s: %s", job["job_id"], exc)
-                job["status"] = "error"
-                job["processed"] = 0
-                job["total"] = 0
-                job["percent"] = 0
-                job["message"] = "Failed to scan the local source folder for matching files"
-                return self._copy_job_progress(job)
-
-            job["_matching_completed"] = True
-
-        job["status"] = "running"
-        job["processed"] = 0
-        job["total"] = DEFAULT_MOCK_SORT_TOTAL
-        job["percent"] = 0
-        job["message"] = self._build_running_message(job)
-        return self._copy_job_progress(job)
-
-    def _build_matching_message(self, selected_assets):
-        asset_count = len(selected_assets)
-        suffix = "asset" if asset_count == 1 else "assets"
-        return f"Fetched iCloud metadata for {asset_count} {suffix}. Matching local files..."
-
-    def _build_preparing_message(self):
-        return "Preparing matching job..."
-
-    def _build_running_message(self, job):
-        match_results = self._copy_match_results_summary(job.get("match_results"))
-        return (
-            f"Starting sort for {len(job['selected_album_ids'])} album(s). "
-            f"{self._build_match_quality_message(match_results)}"
-        )
-
-    def _empty_match_results(self):
-        return {
-            "matched": 0,
-            # Kept for bridge compatibility until a verified fallback strategy exists.
-            "fallback_matched": 0,
-            "not_found": 0,
-            "ambiguous": 0,
-            "assets": [],
-        }
-
-    def _copy_match_results_summary(self, match_results):
-        summary = self._empty_match_results()
-        if isinstance(match_results, dict):
-            for key in ("matched", "fallback_matched", "not_found", "ambiguous"):
-                try:
-                    summary[key] = int(match_results.get(key, 0))
-                except (TypeError, ValueError):
-                    summary[key] = 0
-        summary.pop("assets")
-        return summary
-
-    def _build_processing_message(self, job):
-        match_results = self._copy_match_results_summary(job.get("match_results"))
-        return (
-            f"Processing photo {job['processed']} of {job['total']}. "
-            f"{self._build_match_quality_message(match_results)}"
-        )
-
-    def _build_complete_message(self, job):
-        match_results = self._copy_match_results_summary(job.get("match_results"))
-        return f"Sort complete. {self._build_match_quality_message(match_results)}"
-
-    def _build_match_quality_message(self, match_results):
-        return (
-            "Filename-only matching: "
-            f"Exact: {match_results['matched']} | "
-            f"Not found: {match_results['not_found']} | "
-            f"Ambiguous: {match_results['ambiguous']}"
-        )
 
     def _require_source_folder(self):
         source_folder = None
