@@ -771,3 +771,77 @@ def test_start_sort_returns_clear_error_when_source_folder_is_not_a_directory(tm
     assert result == {
         "error": "Configured source folder is not a folder. Update the source folder in Settings before starting a sort."
     }
+
+
+def test_start_sort_returns_clear_error_when_source_folder_is_not_readable(
+    tmp_path,
+    monkeypatch,
+):
+    album = FakeAlbum(
+        "album-1",
+        "Vacation 2025",
+        [FakeAsset(id="asset-1", filename="IMG_001.HEIC", media_type="image")],
+    )
+    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 1,
+                "is_system_album": False,
+            },
+        ],
+    )
+    seed_raw_albums(service, album)
+    monkeypatch.setattr(
+        "app.icloud.icloud_service.os.access",
+        lambda path, mode: False if mode == settings_module.os.R_OK else True,
+    )
+
+    result = service.start_sort(["album-1"])
+
+    assert result == {
+        "error": "Configured source folder cannot be read. Check folder permissions in Windows and update Settings if needed."
+    }
+    assert album.asset_request_count == 0
+
+
+def test_start_sort_returns_clear_error_when_source_folder_is_not_writable(
+    tmp_path,
+    monkeypatch,
+):
+    album = FakeAlbum(
+        "album-1",
+        "Vacation 2025",
+        [FakeAsset(id="asset-1", filename="IMG_001.HEIC", media_type="image")],
+    )
+    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    seed_album_cache(
+        service,
+        [
+            {
+                "id": "album-1",
+                "name": "Vacation 2025",
+                "item_count": 1,
+                "is_system_album": False,
+            },
+        ],
+    )
+    seed_raw_albums(service, album)
+    monkeypatch.setattr(
+        "app.icloud.icloud_service.validate_destination_folder",
+        lambda path: {
+            "status": "failed_filesystem_error",
+            "destination_folder": str(path),
+            "error": "Permission denied",
+        },
+    )
+
+    result = service.start_sort(["album-1"])
+
+    assert result == {
+        "error": "Configured source folder cannot be written to. Choose a writable iCloud Photos folder in Settings before starting a sort."
+    }
+    assert album.asset_request_count == 0

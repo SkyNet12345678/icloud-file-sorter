@@ -79,13 +79,13 @@
 
 ## 9. Source Folder Validation
 
-- [ ] 9.1 Keep auto-detection limited to cases where no source folder is configured
-- [ ] 9.2 Preserve stale configured paths instead of silently replacing them with a newly detected path
-- [ ] 9.3 Validate source folder existence, directory status, readability, and destination write capability before file operations
-- [ ] 9.4 Return clear guidance when source-folder validation fails
-- [ ] 9.5 Treat iCloud for Windows installation detection as advisory/future guidance, not a hard blocker
-- [ ] 9.6 Keep placeholder/offline file behavior out of MVP implementation scope
-- [ ] 9.7 Create/update tests for stale path and sort-start validation behavior
+- [x] 9.1 Keep auto-detection limited to cases where no source folder is configured
+- [x] 9.2 Preserve stale configured paths instead of silently replacing them with a newly detected path
+- [x] 9.3 Validate source folder existence, directory status, readability, and destination write capability before file operations
+- [x] 9.4 Return clear guidance when source-folder validation fails
+- [x] 9.5 Treat iCloud for Windows installation detection as advisory/future guidance, not a hard blocker
+- [x] 9.6 Keep placeholder/offline file behavior out of MVP implementation scope
+- [x] 9.7 Create/update tests for stale path and sort-start validation behavior
 
 ## 10. Integration and Testing
 
