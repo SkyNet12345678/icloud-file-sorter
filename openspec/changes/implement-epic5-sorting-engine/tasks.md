@@ -1,29 +1,29 @@
 ## 1. Baseline Alignment
 
-- [ ] 1.1 Confirm Epic 5 reuses existing `app/settings.py` instead of creating a parallel settings model
-- [ ] 1.2 Confirm `source_folder` and `sorting_approach` remain the persisted settings keys
-- [ ] 1.3 Confirm `sorting_approach` values remain `first` and `copy`
-- [ ] 1.4 Confirm existing selected-album asset aggregation is the sorting-engine input
-- [ ] 1.5 Confirm existing recursive filename scanner is reused as the matching baseline
+- [x] 1.1 Confirm Epic 5 reuses existing `app/settings.py` instead of creating a parallel settings model
+- [x] 1.2 Confirm `source_folder` and `sorting_approach` remain the persisted settings keys
+- [x] 1.3 Confirm `sorting_approach` values remain `first` and `copy`
+- [x] 1.4 Confirm existing selected-album asset aggregation is the sorting-engine input
+- [x] 1.5 Confirm existing recursive filename scanner is reused as the matching baseline
 
 ## 2. Sort State Persistence
 
-- [ ] 2.1 Define sort state schema with `schema_version`, job metadata, selected albums, album folder mappings, processed assets, statuses, errors, and timestamps
-- [ ] 2.2 Add canonical/moved path and app-created copy path tracking to state records
-- [ ] 2.3 Implement atomic JSON write functionality for sort state
-- [ ] 2.4 Implement sort state load/save helpers using the existing app data directory
-- [ ] 2.5 Treat missing/stale persisted paths as advisory state, not corruption
-- [ ] 2.6 Add cleanup/ignore behavior for missing tracked copy paths
-- [ ] 2.7 Create unit tests for sort state persistence and stale path handling
+- [x] 2.1 Define sort state schema with `schema_version`, job metadata, selected albums, album folder mappings, processed assets, statuses, errors, and timestamps
+- [x] 2.2 Add canonical/moved path and app-created copy path tracking to state records
+- [x] 2.3 Implement atomic JSON write functionality for sort state
+- [x] 2.4 Implement sort state load/save helpers using the existing app data directory
+- [x] 2.5 Treat missing/stale persisted paths as advisory state, not corruption
+- [x] 2.6 Add cleanup/ignore behavior for missing tracked copy paths
+- [x] 2.7 Create unit tests for sort state persistence and stale path handling
 
 ## 3. Album Folder Mapping
 
-- [ ] 3.1 Implement Windows-safe folder-name sanitization for iCloud album names
-- [ ] 3.2 Handle reserved Windows names, illegal characters, trailing spaces/dots, and overly long names
-- [ ] 3.3 Persist stable album ID to folder path mappings
-- [ ] 3.4 Add deterministic suffix handling for duplicate sanitized album names
-- [ ] 3.5 Keep existing folder mappings stable when iCloud album names/order change
-- [ ] 3.6 Create unit tests for folder-name sanitization, duplicate names, and mapping stability
+- [x] 3.1 Implement Windows-safe folder-name sanitization for iCloud album names
+- [x] 3.2 Handle reserved Windows names, illegal characters, trailing spaces/dots, and overly long names
+- [x] 3.3 Persist stable album ID to folder path mappings
+- [x] 3.4 Add deterministic suffix handling for duplicate sanitized album names
+- [x] 3.5 Keep existing folder mappings stable when iCloud album names/order change
+- [x] 3.6 Create unit tests for folder-name sanitization, duplicate names, and mapping stability
 
 ## 4. Matching Extension for Recursive Re-Sort
 
