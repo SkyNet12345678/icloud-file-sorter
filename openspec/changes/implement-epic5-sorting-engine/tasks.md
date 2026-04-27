@@ -58,14 +58,14 @@
 
 ## 7. Sort Job Orchestration
 
-- [ ] 7.1 Create sort job manager/orchestrator for matching handoff, operation planning, execution, progress, and summaries
-- [ ] 7.2 Replace downstream mocked progress with actual planned file operation counts
-- [ ] 7.3 Implement background/non-blocking processing for sort jobs
-- [ ] 7.4 Implement lifecycle states: start, matching/planning, running, cancelling, cancelled, complete, error
-- [ ] 7.5 Implement cancellation as stop-after-current-operation with no rollback
-- [ ] 7.6 Persist state periodically during processing and when cancellation/completion occurs
-- [ ] 7.7 Generate final summary counts and skipped/error details
-- [ ] 7.8 Create unit tests for orchestration, cancellation, completion, and summary generation
+- [x] 7.1 Create sort job manager/orchestrator for matching handoff, operation planning, execution, progress, and summaries
+- [x] 7.2 Replace downstream mocked progress with actual planned file operation counts
+- [x] 7.3 Implement background/non-blocking processing for sort jobs
+- [x] 7.4 Implement lifecycle states: start, matching/planning, running, cancelling, cancelled, complete, error
+- [x] 7.5 Implement cancellation as stop-after-current-operation with no rollback
+- [x] 7.6 Persist state periodically during processing and when cancellation/completion occurs
+- [x] 7.7 Generate final summary counts and skipped/error details
+- [x] 7.8 Create unit tests for orchestration, cancellation, completion, and summary generation
 
 ## 8. Python Bridge and Frontend Wiring
 

@@ -6,6 +6,8 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from app.scanner import LocalScanner
+from app.sorting.sort_job import SortJobManager
+from app.state.sort_state import SortStateStore
 
 logger = logging.getLogger("icloud-sorter")
 
@@ -18,10 +20,14 @@ def _album_type_name(album):
 
 
 class ICloudService:
-    def __init__(self, api, settings_service=None):
+    def __init__(self, api, settings_service=None, sort_job_manager=None):
         self.api = api
         self.settings_service = settings_service
-        self.jobs = {}
+        self.sort_job_manager = sort_job_manager or SortJobManager(
+            state_store=self._build_sort_state_store(),
+            run_async=True,
+        )
+        self.jobs = self.sort_job_manager.jobs
         self.album_cache_loaded = False
         self.album_list_cache = []
         self.album_summaries_by_id = {}
@@ -58,57 +64,26 @@ class ICloudService:
         except RuntimeError as exc:
             return {"error": str(exc)}
 
-        selected_albums = self._resolve_selected_album_names(selected_ids)
+        selected_albums = self._resolve_selected_album_records(selected_ids)
+        sorting_approach = self._get_sorting_approach()
 
-        job_id = str(uuid.uuid4())
-        self.jobs[job_id] = {
-            "job_id": job_id,
-            "status": "matching",
-            "processed": 0,
-            "total": 0,
-            "percent": 0,
-            "selected_album_ids": selected_ids,
-            "selected_albums": selected_albums,
-            "selected_assets": [],
-            "matched_assets": [],
-            "source_folder": source_folder,
-            "match_results": self._empty_match_results(),
-            "message": self._build_preparing_message(),
-            "_matching_reported": False,
-            "_matching_prepared": False,
-            "_matching_fetch_in_progress": False,
-            "_matching_completed": False,
-        }
-
-        return {"job_id": job_id}
+        return self.sort_job_manager.start_job(
+            job_id=str(uuid.uuid4()),
+            selected_album_ids=selected_ids,
+            selected_albums=selected_albums,
+            source_folder=source_folder,
+            sorting_approach=sorting_approach,
+            asset_loader=lambda: self.get_assets_for_album_ids(
+                selected_ids,
+                force_refresh=True,
+            ),
+        )
 
     def get_sort_progress(self, job_id):
-        job = self.jobs.get(job_id)
+        return self.sort_job_manager.get_progress(job_id)
 
-        if not job:
-            return {
-                "job_id": job_id,
-                "status": "error",
-                "processed": 0,
-                "total": 0,
-                "percent": 0,
-                "message": "Unknown job id",
-            }
-
-        if job["status"] == "matching":
-            return self._advance_matching_job(job)
-
-        if job["status"] == "running":
-            job["processed"] = min(job["processed"] + 50, job["total"])
-            job["percent"] = int((job["processed"] / job["total"]) * 100) if job["total"] else 100
-            job["message"] = self._build_processing_message(job)
-
-            if job["processed"] >= job["total"]:
-                job["status"] = "complete"
-                job["percent"] = 100
-                job["message"] = self._build_complete_message(job)
-
-        return self._copy_job_progress(job)
+    def cancel_sort(self, job_id):
+        return self.sort_job_manager.cancel_job(job_id)
 
     def get_cached_album(self, album_id):
         self._require_album_cache_loaded()
@@ -476,6 +451,32 @@ class ICloudService:
             for album_id in selected_album_ids
             if album_id in self.album_summaries_by_id
         ]
+
+    def _resolve_selected_album_records(self, selected_album_ids):
+        return [
+            {
+                "id": album_id,
+                "name": self.album_summaries_by_id[album_id]["name"],
+            }
+            for album_id in selected_album_ids
+            if album_id in self.album_summaries_by_id
+        ]
+
+    def _get_sorting_approach(self):
+        if self.settings_service is None:
+            return "first"
+        get_sorting_approach = getattr(self.settings_service, "get_sorting_approach", None)
+        if not callable(get_sorting_approach):
+            return "first"
+        return get_sorting_approach()
+
+    def _build_sort_state_store(self):
+        if self.settings_service is None:
+            return None
+        get_app_data_dir = getattr(self.settings_service, "get_app_data_dir", None)
+        if not callable(get_app_data_dir):
+            return None
+        return SortStateStore(settings_service=self.settings_service)
 
     def _filter_known_album_ids(self, selected_album_ids):
         self._require_album_cache_loaded()

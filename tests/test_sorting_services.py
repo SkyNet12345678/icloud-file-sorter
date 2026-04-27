@@ -3,8 +3,9 @@ from types import SimpleNamespace
 
 from app import settings as settings_module
 from app.icloud.albums_service import AlbumsService
-from app.icloud.icloud_service import DEFAULT_MOCK_SORT_TOTAL, ICloudService
+from app.icloud.icloud_service import ICloudService
 from app.settings import SettingsService
+from app.sorting.sort_job import SortJobManager
 
 
 class FakeSettingsService:
@@ -81,7 +82,11 @@ def test_get_albums_keeps_album_browsing_lightweight():
 
 
 def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
-    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    service = ICloudService(
+        api=None,
+        settings_service=FakeSettingsService(tmp_path),
+        sort_job_manager=SortJobManager(run_async=False),
+    )
     (tmp_path / "IMG_001.HEIC").write_text("asset-1", encoding="utf-8")
     album_one = FakeAlbum(
         "album-1",
@@ -128,86 +133,50 @@ def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
     assert "job_id" in result
 
     job = service.jobs[result["job_id"]]
-    assert job["status"] == "matching"
-    assert job["processed"] == 0
-    assert job["total"] == 0
-    assert job["percent"] == 0
+    assert job["status"] == "complete"
+    assert job["processed"] == 1
+    assert job["total"] == 1
+    assert job["percent"] == 100
     assert job["selected_album_ids"] == ["album-1", "album-2"]
-    assert job["selected_albums"] == ["Vacation 2025", "Screenshots"]
+    assert job["selected_albums"] == [
+        {"id": "album-1", "name": "Vacation 2025"},
+        {"id": "album-2", "name": "Screenshots"},
+    ]
     assert job["source_folder"] == str(tmp_path)
-    assert job["selected_assets"] == []
-    assert job["matched_assets"] == []
+    assert len(job["selected_assets"]) == 2
+    assert len(job["matched_assets"]) == 2
     assert job["match_results"] == {
-        "matched": 0,
+        "matched": 1,
         "fallback_matched": 0,
-        "not_found": 0,
+        "not_found": 1,
         "ambiguous": 0,
-        "assets": [],
+        "assets": job["matched_assets"],
     }
-    assert job["message"] == "Preparing matching job..."
-    assert album_one.asset_request_count == 0
-    assert album_two.asset_request_count == 0
-    assert album_three.asset_request_count == 0
-
-    initial_matching_progress = service.get_sort_progress(result["job_id"])
-
-    assert initial_matching_progress == {
-        "job_id": result["job_id"],
-        "status": "matching",
-        "processed": 0,
-        "total": 0,
-        "percent": 0,
-        "message": "Preparing matching job...",
-        "match_results": {
-            "matched": 0,
-            "fallback_matched": 0,
-            "not_found": 0,
-            "ambiguous": 0,
-        },
-    }
-    assert album_one.asset_request_count == 0
-    assert album_two.asset_request_count == 0
-    assert album_three.asset_request_count == 0
-
-    prepared_matching_progress = service.get_sort_progress(result["job_id"])
-
-    assert prepared_matching_progress == {
-        "job_id": result["job_id"],
-        "status": "matching",
-        "processed": 0,
-        "total": 2,
-        "percent": 0,
-        "message": "Fetched iCloud metadata for 2 assets. Matching local files...",
-        "match_results": {
-            "matched": 0,
-            "fallback_matched": 0,
-            "not_found": 0,
-            "ambiguous": 0,
-        },
-    }
-    assert len(service.jobs[result["job_id"]]["selected_assets"]) == 2
+    assert job["message"] == (
+        "Sort complete. Filename-only matching: Exact: 1 | Not found: 1 | Ambiguous: 0"
+    )
     assert album_one.asset_request_count == 1
     assert album_two.asset_request_count == 1
     assert album_three.asset_request_count == 0
+    assert (tmp_path / "Vacation 2025" / "IMG_001.HEIC").exists()
 
-    running_progress = service.get_sort_progress(result["job_id"])
+    progress = service.get_sort_progress(result["job_id"])
 
-    assert running_progress == {
+    assert progress == {
         "job_id": result["job_id"],
-        "status": "running",
-        "processed": 0,
-        "total": DEFAULT_MOCK_SORT_TOTAL,
-        "percent": 0,
-        "message": (
-            "Starting sort for 2 album(s). "
-            "Filename-only matching: Exact: 1 | Not found: 1 | Ambiguous: 0"
-        ),
+        "status": "complete",
+        "processed": 1,
+        "total": 1,
+        "percent": 100,
+        "message": "Sort complete. Filename-only matching: Exact: 1 | Not found: 1 | Ambiguous: 0",
         "match_results": {
             "matched": 1,
             "fallback_matched": 0,
             "not_found": 1,
             "ambiguous": 0,
         },
+        "summary": job["summary"],
+        "details": job["details"],
     }
     assert service.jobs[result["job_id"]]["matched_assets"] == [
         {
@@ -251,7 +220,12 @@ def test_start_sort_creates_matching_job_before_loading_assets(tmp_path):
 
 
 def test_get_sort_progress_does_not_start_duplicate_asset_fetch_while_matching(tmp_path):
-    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    service = ICloudService(
+        api=None,
+        settings_service=FakeSettingsService(tmp_path),
+        sort_job_manager=SortJobManager(run_async=False),
+    )
+    (tmp_path / "IMG_001.HEIC").write_text("asset-1", encoding="utf-8")
     album = FakeAlbum(
         "album-1",
         "Vacation 2025",
@@ -272,17 +246,19 @@ def test_get_sort_progress_does_not_start_duplicate_asset_fetch_while_matching(t
 
     result = service.start_sort(["album-1"])
     service.get_sort_progress(result["job_id"])
-    service.jobs[result["job_id"]]["_matching_fetch_in_progress"] = True
 
     progress = service.get_sort_progress(result["job_id"])
 
-    assert progress["status"] == "matching"
-    assert progress["message"] == "Preparing matching job..."
-    assert album.asset_request_count == 0
+    assert progress["status"] == "complete"
+    assert album.asset_request_count == 1
 
 
 def test_start_sort_aggregates_overlapping_album_assets_into_one_job_entry(tmp_path):
-    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    service = ICloudService(
+        api=None,
+        settings_service=FakeSettingsService(tmp_path),
+        sort_job_manager=SortJobManager(run_async=False),
+    )
     shared_local_file = tmp_path / "IMG_SHARED.HEIC"
     unique_local_file = tmp_path / "IMG_0002.HEIC"
     shared_local_file.write_text("shared", encoding="utf-8")
@@ -398,7 +374,11 @@ def test_start_sort_aggregates_overlapping_album_assets_into_one_job_entry(tmp_p
 
 
 def test_get_sort_progress_excludes_selected_assets_from_polling_payload(tmp_path):
-    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    service = ICloudService(
+        api=None,
+        settings_service=FakeSettingsService(tmp_path),
+        sort_job_manager=SortJobManager(run_async=False),
+    )
     album = FakeAlbum(
         "album-1",
         "Vacation 2025",
@@ -429,13 +409,15 @@ def test_get_sort_progress_excludes_selected_assets_from_polling_payload(tmp_pat
         "percent",
         "message",
         "match_results",
+        "summary",
+        "details",
     }
     assert "selected_assets" not in progress
     assert "matched_assets" not in progress
     assert progress["match_results"] == {
         "matched": 0,
         "fallback_matched": 0,
-        "not_found": 0,
+        "not_found": 1,
         "ambiguous": 0,
     }
     assert len(service.jobs[result["job_id"]]["selected_assets"]) == 1
@@ -446,24 +428,28 @@ def test_get_sort_progress_returns_error_for_unknown_job():
 
     result = service.get_sort_progress("missing-job")
 
-    assert result == {
-        "job_id": "missing-job",
-        "status": "error",
-        "processed": 0,
-        "total": 0,
-        "percent": 0,
-        "message": "Unknown job id",
+    assert result["job_id"] == "missing-job"
+    assert result["status"] == "error"
+    assert result["processed"] == 0
+    assert result["total"] == 0
+    assert result["percent"] == 0
+    assert result["message"] == "Unknown job id"
+    assert result["match_results"] == {
+        "matched": 0,
+        "fallback_matched": 0,
+        "not_found": 0,
+        "ambiguous": 0,
     }
 
 
-def test_get_sort_progress_advances_running_job():
+def test_get_sort_progress_returns_running_job_snapshot_without_mock_advancement():
     service = ICloudService(api=None)
     job_id = "job-1"
     service.jobs[job_id] = {
         "job_id": job_id,
         "status": "running",
         "processed": 0,
-        "total": DEFAULT_MOCK_SORT_TOTAL,
+        "total": 10,
         "percent": 0,
         "selected_albums": ["Vacation 2025"],
         "message": "Starting sort for 1 album(s)...",
@@ -473,12 +459,9 @@ def test_get_sort_progress_advances_running_job():
 
     assert result["job_id"] == job_id
     assert result["status"] == "running"
-    assert result["processed"] == 50
-    assert result["percent"] == 2
-    assert result["message"] == (
-        f"Processing photo 50 of {DEFAULT_MOCK_SORT_TOTAL}. "
-        "Filename-only matching: Exact: 0 | Not found: 0 | Ambiguous: 0"
-    )
+    assert result["processed"] == 0
+    assert result["percent"] == 0
+    assert result["message"] == "Starting sort for 1 album(s)..."
     assert result["match_results"] == {
         "matched": 0,
         "fallback_matched": 0,
@@ -487,23 +470,23 @@ def test_get_sort_progress_advances_running_job():
     }
 
 
-def test_get_sort_progress_marks_job_complete_when_total_is_reached():
+def test_get_sort_progress_returns_complete_job_snapshot():
     service = ICloudService(api=None)
     job_id = "job-1"
     service.jobs[job_id] = {
         "job_id": job_id,
-        "status": "running",
-        "processed": 1800,
-        "total": DEFAULT_MOCK_SORT_TOTAL,
-        "percent": 97,
+        "status": "complete",
+        "processed": 10,
+        "total": 10,
+        "percent": 100,
         "selected_albums": ["Vacation 2025"],
-        "message": "Processing photo 1800 of 1847",
+        "message": "Sort complete. Filename-only matching: Exact: 0 | Not found: 0 | Ambiguous: 0",
     }
 
     result = service.get_sort_progress(job_id)
 
     assert result["status"] == "complete"
-    assert result["processed"] == DEFAULT_MOCK_SORT_TOTAL
+    assert result["processed"] == 10
     assert result["percent"] == 100
     assert result["message"] == (
         "Sort complete. Filename-only matching: Exact: 0 | Not found: 0 | Ambiguous: 0"
@@ -517,7 +500,11 @@ def test_get_sort_progress_marks_job_complete_when_total_is_reached():
 
 
 def test_running_progress_message_keeps_filename_only_match_quality_visible(tmp_path):
-    service = ICloudService(api=None, settings_service=FakeSettingsService(tmp_path))
+    service = ICloudService(
+        api=None,
+        settings_service=FakeSettingsService(tmp_path),
+        sort_job_manager=SortJobManager(run_async=False),
+    )
     (tmp_path / "IMG_001.HEIC").write_text("asset-1", encoding="utf-8")
     duplicate_dir = tmp_path / "duplicates"
     duplicate_dir.mkdir()
@@ -554,13 +541,11 @@ def test_running_progress_message_keeps_filename_only_match_quality_visible(tmp_
     running_progress = service.get_sort_progress(result["job_id"])
 
     assert running_progress["message"] == (
-        "Starting sort for 1 album(s). "
-        "Filename-only matching: Exact: 1 | Not found: 1 | Ambiguous: 1"
+        "Sort complete. Filename-only matching: Exact: 1 | Not found: 1 | Ambiguous: 1"
     )
     follow_up_progress = service.get_sort_progress(result["job_id"])
     assert follow_up_progress["message"] == (
-        f"Processing photo 50 of {DEFAULT_MOCK_SORT_TOTAL}. "
-        "Filename-only matching: Exact: 1 | Not found: 1 | Ambiguous: 1"
+        "Sort complete. Filename-only matching: Exact: 1 | Not found: 1 | Ambiguous: 1"
     )
 
 
