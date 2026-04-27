@@ -8,6 +8,7 @@ from typing import Callable
 from app.scanner import LocalScanner
 from app.sorting.album_folders import build_album_folder_mappings, persist_album_folder_mappings
 from app.sorting.file_operations import (
+    STATUS_ALREADY_COPIED,
     STATUS_COPIED,
     STATUS_MOVED,
     copy_file,
@@ -184,14 +185,19 @@ class SortJobManager:
             job["processed"] = 0
             job["summary"] = _empty_summary()
             self._record_match_outcomes(job, match_results["assets"])
-            job["status"] = JOB_STATUS_RUNNING if operations else JOB_STATUS_COMPLETE
-            job["message"] = _running_message(job) if operations else _complete_message(job)
-            if not operations:
+            if job.get("cancel_requested"):
+                self._mark_job_cancelled(job)
+            elif operations:
+                job["status"] = JOB_STATUS_RUNNING
+                job["message"] = _running_message(job)
+            else:
+                job["status"] = JOB_STATUS_COMPLETE
+                job["message"] = _complete_message(job)
                 job["percent"] = 100
                 job["completed_at"] = utc_now_iso()
         self._persist_job(job, state=state)
 
-        if not operations:
+        if job["status"] == JOB_STATUS_CANCELLED or not operations:
             return
 
         for operation in operations:
@@ -207,7 +213,7 @@ class SortJobManager:
                 job = self.jobs[job_id]
                 operation.update(result)
                 job["processed"] += 1
-                self._record_operation_result(job, operation)
+                self._record_operation_result(job, operation, state)
                 self._update_percent(job)
                 job["message"] = _running_message(job)
                 if result["status"] == STATUS_COPIED:
@@ -237,12 +243,15 @@ class SortJobManager:
         return move_file(operation["source_path"], operation["destination_path"])
 
     def _cancel_job(self, job: dict, state: dict) -> None:
+        self._mark_job_cancelled(job)
+        self._persist_job(job, state=state)
+
+    def _mark_job_cancelled(self, job: dict) -> None:
         job["status"] = JOB_STATUS_CANCELLED
         job["summary"]["remaining"] = max(job["total"] - job["processed"], 0)
         job["message"] = "Sort cancelled. Completed operations were not rolled back."
         job["completed_at"] = utc_now_iso()
         self._update_percent(job)
-        self._persist_job(job, state=state)
 
     def _fail_job(self, job_id: str, message: str, state: dict) -> None:
         with self._lock:
@@ -295,14 +304,14 @@ class SortJobManager:
             elif asset.get("match_type") == "ambiguous":
                 self._record_detail(job, asset, STATUS_SKIPPED_AMBIGUOUS_MATCH)
 
-    def _record_operation_result(self, job: dict, operation: dict) -> None:
+    def _record_operation_result(self, job: dict, operation: dict, state: dict) -> None:
         status = operation["status"]
         summary = job["summary"]
         summary[status] = summary.get(status, 0) + 1
         summary["processed"] = job["processed"]
         summary["remaining"] = max(job["total"] - job["processed"], 0)
 
-        asset_state = self._asset_state_for_operation(job, operation)
+        asset_state = self._asset_state_for_operation(job, operation, state)
         job.setdefault("processed_assets", {})[operation["asset_id"]] = asset_state
 
         if status not in {STATUS_MOVED, STATUS_COPIED}:
@@ -321,11 +330,21 @@ class SortJobManager:
             detail["candidate_paths"] = list(asset.get("candidate_paths", []))
         job["details"].append(detail)
 
-    def _asset_state_for_operation(self, job: dict, operation: dict) -> dict:
-        existing = job.setdefault("processed_assets", {}).get(operation["asset_id"], {})
-        copy_paths = list(existing.get("app_created_copy_paths", []))
+    def _asset_state_for_operation(self, job: dict, operation: dict, state: dict) -> dict:
+        persisted = state.get("processed_assets", {}).get(operation["asset_id"], {})
+        current = job.setdefault("processed_assets", {}).get(operation["asset_id"], {})
+        persisted = persisted if isinstance(persisted, dict) else {}
+        current = current if isinstance(current, dict) else {}
+        copy_paths = _merge_copy_paths(
+            persisted.get("app_created_copy_paths", []),
+            current.get("app_created_copy_paths", []),
+        )
+        existing = {**persisted, **current}
         moved_path = existing.get("moved_path")
-        if operation["status"] == STATUS_COPIED and operation["destination_path"] not in copy_paths:
+        if (
+            operation["status"] in {STATUS_COPIED, STATUS_ALREADY_COPIED}
+            and operation["destination_path"] not in copy_paths
+        ):
             copy_paths.append(operation["destination_path"])
         if operation["status"] == STATUS_MOVED:
             moved_path = operation["destination_path"]
@@ -401,6 +420,15 @@ class SortJobManager:
         for asset_id, asset_state in job.get("processed_assets", {}).items():
             state["processed_assets"][asset_id] = asset_state
         self.state_store.save(state)
+
+
+def _merge_copy_paths(*path_groups: list[str]) -> list[str]:
+    merged = []
+    for paths in path_groups:
+        for path in paths or []:
+            if path and path not in merged:
+                merged.append(path)
+    return merged
 
 
 def _empty_match_results() -> dict:

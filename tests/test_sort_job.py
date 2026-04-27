@@ -86,6 +86,23 @@ def test_sort_job_copy_mode_preserves_source_and_tracks_created_copy_paths(tmp_p
         str(tmp_path / "Favorites" / "IMG_SHARED.HEIC"),
     ]
 
+    manager.start_job(
+        job_id="job-copy-rerun",
+        selected_album_ids=["album-1", "album-2"],
+        selected_albums=selected_albums(),
+        source_folder=str(tmp_path),
+        sorting_approach="copy",
+        asset_loader=lambda: asset_result(
+            [asset("asset-1", "IMG_SHARED.HEIC", ["album-1", "album-2"])]
+        ),
+    )
+
+    rerun_progress = manager.get_progress("job-copy-rerun")
+    rerun_state = store.load()
+
+    assert rerun_progress["summary"]["already_copied"] == 2
+    assert rerun_state["processed_assets"]["asset-1"]["app_created_copy_paths"] == copy_paths
+
 
 def test_sort_job_cancel_stops_after_current_operation_and_persists_state(tmp_path):
     for index in range(3):
@@ -127,6 +144,42 @@ def test_sort_job_cancel_stops_after_current_operation_and_persists_state(tmp_pa
     assert state["active_job_id"] is None
     assert (tmp_path / "Trips" / "IMG_0000.HEIC").exists()
     assert (tmp_path / "IMG_0001.HEIC").exists()
+
+
+def test_sort_job_cancel_before_no_operation_plan_persists_cancelled_status(tmp_path):
+    loader_called = threading.Event()
+    release_loader = threading.Event()
+    store = SortStateStore(app_data_dir=tmp_path / "state")
+    manager = SortJobManager(state_store=store, run_async=True)
+
+    def blocking_asset_loader():
+        loader_called.set()
+        release_loader.wait(timeout=2)
+        return asset_result([asset("asset-1", "IMG_MISSING.HEIC", ["album-1"])])
+
+    manager.start_job(
+        job_id="job-cancel-before-plan",
+        selected_album_ids=["album-1"],
+        selected_albums=selected_albums()[:1],
+        source_folder=str(tmp_path),
+        sorting_approach="first",
+        asset_loader=blocking_asset_loader,
+    )
+    assert loader_called.wait(timeout=2)
+
+    manager.cancel_job("job-cancel-before-plan")
+    release_loader.set()
+    manager.wait_for_job("job-cancel-before-plan", timeout=2)
+
+    progress = manager.get_progress("job-cancel-before-plan")
+    state = store.load()
+
+    assert progress["status"] == JOB_STATUS_CANCELLED
+    assert progress["processed"] == 0
+    assert progress["total"] == 0
+    assert progress["summary"]["unmatched"] == 1
+    assert state["jobs"]["job-cancel-before-plan"]["status"] == JOB_STATUS_CANCELLED
+    assert state["active_job_id"] is None
 
 
 def test_sort_job_start_is_non_blocking_when_running_async(tmp_path):
