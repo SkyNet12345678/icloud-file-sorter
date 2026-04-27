@@ -8,13 +8,13 @@
 
 ## 2. Sort State Persistence
 
-- [ ] 2.1 Define sort state schema with `schema_version`, job metadata, selected albums, album folder mappings, processed assets, statuses, errors, and timestamps
-- [ ] 2.2 Add canonical/moved path and app-created copy path tracking to state records
-- [ ] 2.3 Implement atomic JSON write functionality for sort state
-- [ ] 2.4 Implement sort state load/save helpers using the existing app data directory
-- [ ] 2.5 Treat missing/stale persisted paths as advisory state, not corruption
-- [ ] 2.6 Add cleanup/ignore behavior for missing tracked copy paths
-- [ ] 2.7 Create unit tests for sort state persistence and stale path handling
+- [x] 2.1 Define sort state schema with `schema_version`, job metadata, selected albums, album folder mappings, processed assets, statuses, errors, and timestamps
+- [x] 2.2 Add canonical/moved path and app-created copy path tracking to state records
+- [x] 2.3 Implement atomic JSON write functionality for sort state
+- [x] 2.4 Implement sort state load/save helpers using the existing app data directory
+- [x] 2.5 Treat missing/stale persisted paths as advisory state, not corruption
+- [x] 2.6 Add cleanup/ignore behavior for missing tracked copy paths
+- [x] 2.7 Create unit tests for sort state persistence and stale path handling
 
 ## 3. Album Folder Mapping
 
