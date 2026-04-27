@@ -36,16 +36,16 @@
 
 ## 5. Safe File Operations
 
-- [ ] 5.1 Create file operations module for album folder creation and file moving/copying
-- [ ] 5.2 Validate destination folders can be created/written before processing operations
-- [ ] 5.3 Implement safe file move functionality with no automatic overwrite
-- [ ] 5.4 Implement safe file copy functionality with no automatic overwrite
-- [ ] 5.5 Implement `already_sorted` when source path equals destination path
-- [ ] 5.6 Implement `already_copied` when destination exists as a tracked app-created copy
-- [ ] 5.7 Implement `skipped_destination_exists` when destination exists but is not tracked
-- [ ] 5.8 Implement `skipped_source_missing` when a previously matched source is gone
-- [ ] 5.9 Implement filesystem error capture while continuing remaining files where possible
-- [ ] 5.10 Create unit tests for move/copy/no-op/conflict/error scenarios
+- [x] 5.1 Create file operations module for album folder creation and file moving/copying
+- [x] 5.2 Validate destination folders can be created/written before processing operations
+- [x] 5.3 Implement safe file move functionality with no automatic overwrite
+- [x] 5.4 Implement safe file copy functionality with no automatic overwrite
+- [x] 5.5 Implement `already_sorted` when source path equals destination path
+- [x] 5.6 Implement `already_copied` when destination exists as a tracked app-created copy
+- [x] 5.7 Implement `skipped_destination_exists` when destination exists but is not tracked
+- [x] 5.8 Implement `skipped_source_missing` when a previously matched source is gone
+- [x] 5.9 Implement filesystem error capture while continuing remaining files where possible
+- [x] 5.10 Create unit tests for move/copy/no-op/conflict/error scenarios
 
 ## 6. Multi-Album Behavior
 
