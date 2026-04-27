@@ -1,8 +1,10 @@
-# Review Follow-ups For Next Codex Session
+# Review Follow-ups
 
-This file captures two functional review findings from the Epic 4 sort/matching path and the proposed fixes.
+This file captures functional review findings from the Epic 4/Epic 5 sort and matching path.
 
 ## 1. Preserve Invalid Configured Source Folder Errors
+
+Status: addressed in Epic 5 source-folder validation work.
 
 Location: `app/settings.py`
 
@@ -18,6 +20,9 @@ Expected behavior:
 - Auto-detection should only populate the source folder when the setting is unset or blank.
 - A stale configured source folder should remain the configured value and should be reported as invalid during sort validation.
 - Sorting should not silently switch to a newly detected folder when the user already configured a path.
+- On Windows, the preferred source folder is `C:\Users\USER\Pictures\iCloud Photos\Photos`, not the parent `C:\Users\USER\Pictures\iCloud Photos`.
+- If a configured path points at the parent `iCloud Photos` folder and its `Photos` child exists, normalize the setting to the `Photos` child because that is the sortable iCloud Photos root.
+- Album folders must remain inside the configured source folder.
 
 Proposed fix:
 
