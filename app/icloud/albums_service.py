@@ -84,6 +84,31 @@ class AlbumsService:
                 "message": "Failed to get sort progress",
             }
 
+    def cancel_sort(self, job_id):
+        if not self.icloud:
+            logger.warning("cancel_sort called but icloud service is not initialized")
+            return {
+                "job_id": job_id,
+                "status": "error",
+                "processed": 0,
+                "total": 0,
+                "percent": 0,
+                "message": "Sorting service unavailable",
+            }
+
+        try:
+            return self.icloud.cancel_sort(job_id)
+        except Exception as exc:
+            logger.exception("Failed to cancel sort: %s", exc)
+            return {
+                "job_id": job_id,
+                "status": "error",
+                "processed": 0,
+                "total": 0,
+                "percent": 0,
+                "message": "Failed to cancel sort",
+            }
+
     def _album_failure(self, error_message):
         return {
             "success": False,

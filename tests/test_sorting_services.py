@@ -582,6 +582,47 @@ def test_albums_service_get_sort_progress_returns_error_without_icloud():
     }
 
 
+def test_albums_service_cancel_sort_returns_error_without_icloud():
+    service = AlbumsService(icloud_api=None)
+    service.icloud = None
+
+    result = service.cancel_sort("job-1")
+
+    assert result == {
+        "job_id": "job-1",
+        "status": "error",
+        "processed": 0,
+        "total": 0,
+        "percent": 0,
+        "message": "Sorting service unavailable",
+    }
+
+
+def test_albums_service_cancel_sort_delegates_to_icloud_service():
+    service = AlbumsService(icloud_api=None)
+    service.icloud = SimpleNamespace(
+        cancel_sort=lambda job_id: {
+            "job_id": job_id,
+            "status": "cancelled",
+            "processed": 1,
+            "total": 3,
+            "percent": 33,
+            "message": "Sort cancelled. Completed operations were not rolled back.",
+        }
+    )
+
+    result = service.cancel_sort("job-1")
+
+    assert result == {
+        "job_id": "job-1",
+        "status": "cancelled",
+        "processed": 1,
+        "total": 3,
+        "percent": 33,
+        "message": "Sort cancelled. Completed operations were not rolled back.",
+    }
+
+
 def test_albums_service_get_album_assets_delegates_correctly():
     service = AlbumsService(icloud_api=None)
     mock_icloud = ICloudService(api=None)

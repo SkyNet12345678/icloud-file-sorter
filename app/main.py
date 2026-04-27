@@ -97,6 +97,18 @@ class API:
             }
         return self.albums_service.get_sort_progress(job_id)
 
+    def cancel_sort(self, job_id):
+        if not self.albums_service:
+            return {
+                "job_id": job_id,
+                "status": "error",
+                "processed": 0,
+                "total": 0,
+                "percent": 0,
+                "message": "Sorting service unavailable",
+            }
+        return self.albums_service.cancel_sort(job_id)
+
     def get_settings(self):
         return {
             "success": True,
