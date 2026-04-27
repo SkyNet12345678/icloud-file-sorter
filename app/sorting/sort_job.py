@@ -11,8 +11,10 @@ from app.sorting.file_operations import (
     STATUS_ALREADY_COPIED,
     STATUS_COPIED,
     STATUS_MOVED,
+    STATUS_READY,
     copy_file,
     move_file,
+    validate_destination_folder,
 )
 from app.sorting.multi_album import SORTING_APPROACH_COPY, plan_sort_operations
 from app.state.sort_state import (
@@ -142,6 +144,8 @@ class SortJobManager:
         if not asset_result.get("success"):
             self._fail_job(job_id, asset_result.get("error") or "Failed to load album assets", state)
             return
+        if self._cancel_if_requested(job_id, state):
+            return
 
         selected_assets = asset_result.get("assets", [])
         with self._lock:
@@ -152,9 +156,17 @@ class SortJobManager:
         self._persist_job(job, state=state)
 
         tracked_copy_paths = get_existing_tracked_copy_paths(state)
-        scanner = LocalScanner(job["source_folder"], ignored_paths=tracked_copy_paths)
+        scanner = LocalScanner(
+            job["source_folder"],
+            ignored_paths=tracked_copy_paths,
+            cancel_requested=lambda: self._is_cancel_requested(job_id),
+        )
         scanner.scan()
+        if self._cancel_if_requested(job_id, state):
+            return
         match_results = scanner.match_assets(selected_assets)
+        if self._cancel_if_requested(job_id, state):
+            return
 
         with self._lock:
             job = self.jobs[job_id]
@@ -177,6 +189,9 @@ class SortJobManager:
             state["album_folder_mappings"],
             sorting_approach=job["sorting_approach"],
         )
+        if self._cancel_if_requested(job_id, state):
+            return
+        destination_error = _preflight_destination_folders(operations)
 
         with self._lock:
             job = self.jobs[job_id]
@@ -187,6 +202,13 @@ class SortJobManager:
             self._record_match_outcomes(job, match_results["assets"])
             if job.get("cancel_requested"):
                 self._mark_job_cancelled(job)
+            elif destination_error:
+                job["status"] = JOB_STATUS_ERROR
+                job["message"] = destination_error
+                job["errors"].append(destination_error)
+                job["summary"]["remaining"] = len(operations)
+                job["completed_at"] = utc_now_iso()
+                self._update_percent(job)
             elif operations:
                 job["status"] = JOB_STATUS_RUNNING
                 job["message"] = _running_message(job)
@@ -197,7 +219,7 @@ class SortJobManager:
                 job["completed_at"] = utc_now_iso()
         self._persist_job(job, state=state)
 
-        if job["status"] == JOB_STATUS_CANCELLED or not operations:
+        if job["status"] in {JOB_STATUS_CANCELLED, JOB_STATUS_ERROR} or not operations:
             return
 
         for operation in operations:
@@ -245,6 +267,19 @@ class SortJobManager:
     def _cancel_job(self, job: dict, state: dict) -> None:
         self._mark_job_cancelled(job)
         self._persist_job(job, state=state)
+
+    def _cancel_if_requested(self, job_id: str, state: dict) -> bool:
+        with self._lock:
+            job = self.jobs[job_id]
+            if not job.get("cancel_requested"):
+                return False
+            self._mark_job_cancelled(job)
+        self._persist_job(job, state=state)
+        return True
+
+    def _is_cancel_requested(self, job_id: str) -> bool:
+        with self._lock:
+            return bool(self.jobs[job_id].get("cancel_requested"))
 
     def _mark_job_cancelled(self, job: dict) -> None:
         job["status"] = JOB_STATUS_CANCELLED
@@ -429,6 +464,24 @@ def _merge_copy_paths(*path_groups: list[str]) -> list[str]:
             if path and path not in merged:
                 merged.append(path)
     return merged
+
+
+def _preflight_destination_folders(operations: list[dict]) -> str | None:
+    checked_folders = set()
+    for operation in operations:
+        destination_folder = Path(operation["destination_path"]).parent
+        folder_key = str(destination_folder.resolve(strict=False)).casefold()
+        if folder_key in checked_folders:
+            continue
+        checked_folders.add(folder_key)
+
+        result = validate_destination_folder(destination_folder)
+        if result["status"] != STATUS_READY:
+            return (
+                "Destination folder validation failed for "
+                f"{result['destination_folder']}: {result['error']}"
+            )
+    return None
 
 
 def _empty_match_results() -> dict:

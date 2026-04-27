@@ -9,6 +9,7 @@ reliable enough for safe fallback matching. Unresolved assets stay as
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 
 def normalize_filename(filename: str | None) -> str | None:
@@ -27,8 +28,10 @@ class LocalScanner:
         source_folder: str | Path,
         *,
         ignored_paths: set[str] | list[str] | tuple[str, ...] | None = None,
+        cancel_requested: Callable[[], bool] | None = None,
     ):
         self.source_folder = Path(source_folder)
+        self.cancel_requested = cancel_requested
         self.ignored_paths = {
             _normalize_path_key(path)
             for path in ignored_paths or []
@@ -36,12 +39,20 @@ class LocalScanner:
         }
         self.filename_index: dict[str, list[dict]] = {}
         self.scanned_files: list[dict] = []
+        self._has_scanned = False
 
     def scan(self) -> list[dict]:
         self.filename_index = {}
         self.scanned_files = []
 
-        for path in sorted(self.source_folder.rglob("*")):
+        paths = (
+            self.source_folder.rglob("*")
+            if self.cancel_requested
+            else sorted(self.source_folder.rglob("*"))
+        )
+        for path in paths:
+            if self._cancel_requested():
+                break
             if not path.is_file():
                 continue
             if _normalize_path_key(path) in self.ignored_paths:
@@ -58,10 +69,11 @@ class LocalScanner:
                 continue
             self.filename_index.setdefault(normalized_filename, []).append(file_record)
 
+        self._has_scanned = True
         return [dict(file_record) for file_record in self.scanned_files]
 
     def match_assets(self, assets: list[dict]) -> dict:
-        if not self.scanned_files:
+        if not self._has_scanned:
             self.scan()
 
         match_results = {
@@ -74,6 +86,8 @@ class LocalScanner:
         }
 
         for asset in assets:
+            if self._cancel_requested():
+                break
             matched_asset = {
                 "asset_id": asset.get("asset_id"),
                 "filename": asset.get("filename"),
@@ -113,6 +127,9 @@ class LocalScanner:
             match_results["assets"].append(matched_asset)
 
         return match_results
+
+    def _cancel_requested(self) -> bool:
+        return bool(self.cancel_requested and self.cancel_requested())
 
 
 def _normalize_path_key(path: str | Path) -> str:

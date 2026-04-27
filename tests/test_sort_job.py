@@ -1,8 +1,10 @@
 import threading
 
+from app.sorting import sort_job
 from app.sorting.sort_job import (
     JOB_STATUS_CANCELLED,
     JOB_STATUS_COMPLETE,
+    JOB_STATUS_ERROR,
     JOB_STATUS_MATCHING,
     SortJobManager,
 )
@@ -151,11 +153,16 @@ def test_sort_job_cancel_stops_after_current_operation_and_persists_large_job_st
     assert (tmp_path / "IMG_0001.HEIC").exists()
 
 
-def test_sort_job_cancel_before_no_operation_plan_persists_cancelled_status(tmp_path):
+def test_sort_job_cancel_before_no_operation_plan_persists_cancelled_status(tmp_path, monkeypatch):
     loader_called = threading.Event()
     release_loader = threading.Event()
     store = SortStateStore(app_data_dir=tmp_path / "state")
     manager = SortJobManager(state_store=store, run_async=True)
+
+    def fail_scan(_scanner):
+        raise AssertionError("cancelled jobs should not scan local files")
+
+    monkeypatch.setattr(sort_job.LocalScanner, "scan", fail_scan)
 
     def blocking_asset_loader():
         loader_called.set()
@@ -182,9 +189,46 @@ def test_sort_job_cancel_before_no_operation_plan_persists_cancelled_status(tmp_
     assert progress["status"] == JOB_STATUS_CANCELLED
     assert progress["processed"] == 0
     assert progress["total"] == 0
-    assert progress["summary"]["unmatched"] == 1
+    assert progress["summary"]["unmatched"] == 0
     assert state["jobs"]["job-cancel-before-plan"]["status"] == JOB_STATUS_CANCELLED
     assert state["active_job_id"] is None
+
+
+def test_sort_job_preflights_destination_folders_before_moving_files(tmp_path):
+    first_source = tmp_path / "IMG_0001.HEIC"
+    second_source = tmp_path / "IMG_0002.HEIC"
+    first_source.write_text("first", encoding="utf-8")
+    second_source.write_text("second", encoding="utf-8")
+    (tmp_path / "Favorites").write_text("blocks album folder", encoding="utf-8")
+    store = SortStateStore(app_data_dir=tmp_path / "state")
+    manager = SortJobManager(state_store=store, run_async=False)
+
+    manager.start_job(
+        job_id="job-destination-preflight",
+        selected_album_ids=["album-1", "album-2"],
+        selected_albums=selected_albums(),
+        source_folder=str(tmp_path),
+        sorting_approach="first",
+        asset_loader=lambda: asset_result(
+            [
+                asset("asset-1", "IMG_0001.HEIC", ["album-1"]),
+                asset("asset-2", "IMG_0002.HEIC", ["album-2"]),
+            ]
+        ),
+    )
+
+    progress = manager.get_progress("job-destination-preflight")
+    state = store.load()
+
+    assert progress["status"] == JOB_STATUS_ERROR
+    assert progress["processed"] == 0
+    assert progress["total"] == 2
+    assert progress["summary"]["remaining"] == 2
+    assert "Destination folder validation failed" in progress["message"]
+    assert first_source.read_text(encoding="utf-8") == "first"
+    assert second_source.read_text(encoding="utf-8") == "second"
+    assert not (tmp_path / "Trips" / "IMG_0001.HEIC").exists()
+    assert state["jobs"]["job-destination-preflight"]["status"] == JOB_STATUS_ERROR
 
 
 def test_sort_job_start_is_non_blocking_when_running_async(tmp_path):
