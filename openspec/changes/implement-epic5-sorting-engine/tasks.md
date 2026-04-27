@@ -18,12 +18,12 @@
 
 ## 3. Album Folder Mapping
 
-- [ ] 3.1 Implement Windows-safe folder-name sanitization for iCloud album names
-- [ ] 3.2 Handle reserved Windows names, illegal characters, trailing spaces/dots, and overly long names
-- [ ] 3.3 Persist stable album ID to folder path mappings
-- [ ] 3.4 Add deterministic suffix handling for duplicate sanitized album names
-- [ ] 3.5 Keep existing folder mappings stable when iCloud album names/order change
-- [ ] 3.6 Create unit tests for folder-name sanitization, duplicate names, and mapping stability
+- [x] 3.1 Implement Windows-safe folder-name sanitization for iCloud album names
+- [x] 3.2 Handle reserved Windows names, illegal characters, trailing spaces/dots, and overly long names
+- [x] 3.3 Persist stable album ID to folder path mappings
+- [x] 3.4 Add deterministic suffix handling for duplicate sanitized album names
+- [x] 3.5 Keep existing folder mappings stable when iCloud album names/order change
+- [x] 3.6 Create unit tests for folder-name sanitization, duplicate names, and mapping stability
 
 ## 4. Matching Extension for Recursive Re-Sort
 
