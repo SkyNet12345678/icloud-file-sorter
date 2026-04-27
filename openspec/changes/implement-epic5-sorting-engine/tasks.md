@@ -1,8 +1,8 @@
 ## 1. Baseline Alignment
 
-- [ ] 1.1 Confirm Epic 5 reuses existing `app/settings.py` instead of creating a parallel settings model
-- [ ] 1.2 Confirm `source_folder` and `sorting_approach` remain the persisted settings keys
-- [ ] 1.3 Confirm `sorting_approach` values remain `first` and `copy`
+- [x] 1.1 Confirm Epic 5 reuses existing `app/settings.py` instead of creating a parallel settings model
+- [x] 1.2 Confirm `source_folder` and `sorting_approach` remain the persisted settings keys
+- [x] 1.3 Confirm `sorting_approach` values remain `first` and `copy`
 - [ ] 1.4 Confirm existing selected-album asset aggregation is the sorting-engine input
 - [ ] 1.5 Confirm existing recursive filename scanner is reused as the matching baseline
 
