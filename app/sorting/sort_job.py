@@ -133,6 +133,28 @@ class SortJobManager:
 
     def _execute_job(self, job_id: str, asset_loader: Callable[[], dict]) -> None:
         state = self._load_state()
+        self._mark_matching_started(job_id, state)
+
+        selected_assets = self._load_selected_assets(job_id, asset_loader, state)
+        if selected_assets is None:
+            return
+
+        match_context = self._match_selected_assets(job_id, selected_assets, state)
+        if match_context is None:
+            return
+        match_results, tracked_copy_paths = match_context
+
+        operations = self._plan_job_operations(job_id, match_results, state)
+        if operations is None:
+            return
+
+        if not self._prepare_job_operations(job_id, operations, match_results, state):
+            return
+
+        if self._run_planned_operations(job_id, operations, tracked_copy_paths, state):
+            self._complete_job(job_id, state)
+
+    def _mark_matching_started(self, job_id: str, state: dict) -> None:
         with self._lock:
             job = self.jobs[job_id]
             job["status"] = JOB_STATUS_MATCHING
@@ -140,12 +162,18 @@ class SortJobManager:
             job["message"] = "Fetching iCloud metadata for selected albums..."
         self._persist_job(job, state=state)
 
+    def _load_selected_assets(
+        self,
+        job_id: str,
+        asset_loader: Callable[[], dict],
+        state: dict,
+    ) -> list[dict] | None:
         asset_result = asset_loader()
         if not asset_result.get("success"):
             self._fail_job(job_id, asset_result.get("error") or "Failed to load album assets", state)
-            return
+            return None
         if self._cancel_if_requested(job_id, state):
-            return
+            return None
 
         selected_assets = asset_result.get("assets", [])
         with self._lock:
@@ -154,19 +182,28 @@ class SortJobManager:
             job["total_assets"] = len(selected_assets)
             job["message"] = _matching_message(selected_assets)
         self._persist_job(job, state=state)
+        return selected_assets
 
+    def _match_selected_assets(
+        self,
+        job_id: str,
+        selected_assets: list[dict],
+        state: dict,
+    ) -> tuple[dict, set[str]] | None:
         tracked_copy_paths = get_existing_tracked_copy_paths(state)
+        with self._lock:
+            source_folder = self.jobs[job_id]["source_folder"]
         scanner = LocalScanner(
-            job["source_folder"],
+            source_folder,
             ignored_paths=tracked_copy_paths,
             cancel_requested=lambda: self._is_cancel_requested(job_id),
         )
         scanner.scan()
         if self._cancel_if_requested(job_id, state):
-            return
+            return None
         match_results = scanner.match_assets(selected_assets)
         if self._cancel_if_requested(job_id, state):
-            return
+            return None
 
         with self._lock:
             job = self.jobs[job_id]
@@ -175,22 +212,45 @@ class SortJobManager:
             job["status"] = JOB_STATUS_PLANNING
             job["message"] = "Planning file operations..."
         self._persist_job(job, state=state)
+        return match_results, tracked_copy_paths
 
-        state = persist_album_folder_mappings(
+    def _plan_job_operations(
+        self,
+        job_id: str,
+        match_results: dict,
+        state: dict,
+    ) -> list[dict] | None:
+        with self._lock:
+            job = self.jobs[job_id]
+            source_folder = job["source_folder"]
+            selected_albums = [dict(album) for album in job["selected_albums"]]
+            sorting_approach = job["sorting_approach"]
+        updated_state = persist_album_folder_mappings(
             state,
             build_album_folder_mappings(
-                job["source_folder"],
-                job["selected_albums"],
+                source_folder,
+                selected_albums,
                 existing_mappings=state.get("album_folder_mappings", {}),
             ),
         )
+        state.clear()
+        state.update(updated_state)
         operations = plan_sort_operations(
             match_results["assets"],
             state["album_folder_mappings"],
-            sorting_approach=job["sorting_approach"],
+            sorting_approach=sorting_approach,
         )
         if self._cancel_if_requested(job_id, state):
-            return
+            return None
+        return operations
+
+    def _prepare_job_operations(
+        self,
+        job_id: str,
+        operations: list[dict],
+        match_results: dict,
+        state: dict,
+    ) -> bool:
         destination_error = _preflight_destination_folders(operations)
 
         with self._lock:
@@ -220,14 +280,22 @@ class SortJobManager:
         self._persist_job(job, state=state)
 
         if job["status"] in {JOB_STATUS_CANCELLED, JOB_STATUS_ERROR} or not operations:
-            return
+            return False
+        return True
 
+    def _run_planned_operations(
+        self,
+        job_id: str,
+        operations: list[dict],
+        tracked_copy_paths: set[str],
+        state: dict,
+    ) -> bool:
         for operation in operations:
             with self._lock:
                 job = self.jobs[job_id]
                 if job.get("cancel_requested"):
                     self._cancel_job(job, state)
-                    return
+                    return False
 
             result = self._execute_operation(operation, tracked_copy_paths)
 
@@ -243,7 +311,9 @@ class SortJobManager:
                 if self.operation_callback is not None:
                     self.operation_callback(job, operation)
             self._persist_job(job, state=state)
+        return True
 
+    def _complete_job(self, job_id: str, state: dict) -> None:
         with self._lock:
             job = self.jobs[job_id]
             if job.get("cancel_requested"):
