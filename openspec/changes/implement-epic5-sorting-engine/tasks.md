@@ -105,3 +105,10 @@
 - [x] 11.4 Document placeholder/offline reconciliation as future investigation, not MVP behavior
 - [x] 11.5 Ensure code follows existing project style and conventions
 - [x] 11.6 Review and remove temporary/debug sorting code
+
+## 12. PR Quality Gate Cleanup
+
+- [x] 12.1 Refactor `SortJobManager._execute_job` into smaller lifecycle phases to reduce cognitive complexity while preserving current sort behavior
+- [x] 12.2 Deduplicate the repeated `Sorting service unavailable` response text in `AlbumsService`
+- [x] 12.3 Deduplicate the repeated `Sorting service unavailable` response text in the pywebview `API` bridge
+- [ ] 12.4 Re-fetch PR SonarQube issues and confirm the quality gate findings are resolved
