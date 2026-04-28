@@ -327,4 +327,85 @@ describe("albums.js", () => {
       "Processing photo 50 of 1847. Filename-only matching: Exact: 1 | Not found: 2 | Ambiguous: 3",
     );
   });
+
+  it("cancels the active sort job through the bridge", async () => {
+    const startSort = vi.fn().mockResolvedValue({ job_id: "job-1" });
+    const cancelSort = vi.fn().mockResolvedValue({
+      job_id: "job-1",
+      status: "cancelling",
+      processed: 1,
+      total: 10,
+      percent: 10,
+      message: "Cancelling sort after the current file operation...",
+    });
+
+    globalThis.pywebview = {
+      api: {
+        start_sort: startSort,
+        get_sort_progress: vi.fn(),
+        cancel_sort: cancelSort,
+      },
+    };
+
+    vi.stubGlobal("setInterval", vi.fn(() => 1));
+    vi.stubGlobal("clearInterval", vi.fn());
+
+    const albums = await import("../../app/ui/js/albums.js");
+    albums.showAlbums([
+      { id: "album-1", name: "Trips", item_count: 12, is_system_album: false },
+    ]);
+
+    document.querySelector('#albums-list input[data-album-id="album-1"]').checked = true;
+
+    await albums.startSort();
+    await albums.cancelSort();
+
+    expect(cancelSort).toHaveBeenCalledWith("job-1");
+    expect(document.getElementById("sort-progress-message").textContent).toBe(
+      "Cancelling sort after the current file operation...",
+    );
+    expect(document.getElementById("cancel-btn").disabled).toBe(true);
+  });
+
+  it("treats cancelled progress as a terminal sort status", async () => {
+    const startSort = vi.fn().mockResolvedValue({ job_id: "job-1" });
+    const getSortProgress = vi.fn().mockResolvedValue({
+      job_id: "job-1",
+      status: "cancelled",
+      processed: 2,
+      total: 10,
+      percent: 20,
+      message: "Sort cancelled. Completed operations were not rolled back.",
+    });
+
+    globalThis.pywebview = {
+      api: {
+        start_sort: startSort,
+        get_sort_progress: getSortProgress,
+      },
+    };
+
+    let pollSortProgress;
+    vi.stubGlobal("setInterval", vi.fn((callback) => {
+      pollSortProgress = callback;
+      return 1;
+    }));
+    const clearIntervalMock = vi.fn();
+    vi.stubGlobal("clearInterval", clearIntervalMock);
+
+    const albums = await import("../../app/ui/js/albums.js");
+    albums.showAlbums([
+      { id: "album-1", name: "Trips", item_count: 12, is_system_album: false },
+    ]);
+
+    document.querySelector('#albums-list input[data-album-id="album-1"]').checked = true;
+
+    await albums.startSort();
+    await pollSortProgress();
+
+    expect(clearIntervalMock).toHaveBeenCalledWith(1);
+    expect(document.getElementById("download-btn").dataset.sorting).toBe("false");
+    expect(document.getElementById("download-btn").hidden).toBe(false);
+    expect(document.getElementById("cancel-btn").hidden).toBe(true);
+  });
 });

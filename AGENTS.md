@@ -21,7 +21,7 @@ Current implementation:
 - `pywebview` window hosting static HTML/CSS/JS from `app/ui/`
 - Python-to-JS bridge exposed through the `API` class in `app/main.py`
 - Apple auth flow implemented in Python via `pyicloud`
-- Album and sorting flows are still mostly mocked
+- Album discovery and sorting are partially real: album metadata is loaded through `pyicloud`, and sorting uses local matching plus filesystem operations
 - Frontend is plain JavaScript, not React
 
 Important existing behavior to preserve:
@@ -31,7 +31,9 @@ Important existing behavior to preserve:
 - The JS bridge shape already used by the UI
 - Existing tests unless we intentionally replace them with better coverage
 - Defer expensive cloud-to-local file matching until sorting starts
-- Check startup prerequisites early: iCloud for Windows presence and iCloud Photos folder existence
+- Validate the configured source folder before sorting; iCloud for Windows installation detection is advisory, while folder access is the hard prerequisite
+- On Windows, the default sortable source folder is `C:\Users\USER\Pictures\iCloud Photos\Photos`, not the parent `C:\Users\USER\Pictures\iCloud Photos`
+- Album folders must always be created inside the configured source folder, for example `C:\Users\mac\Pictures\iCloud Photos\Photos\Trips`
 
 ## Architecture Direction
 
@@ -114,7 +116,7 @@ Guidelines:
 - [app/main.py](/home/mac/code/python/icloud-file-sorter/app/main.py): app entrypoint and pywebview API bridge
 - [app/api/auth_api.py](/home/mac/code/python/icloud-file-sorter/app/api/auth_api.py): login and 2FA orchestration
 - [app/icloud/auth.py](/home/mac/code/python/icloud-file-sorter/app/icloud/auth.py): low-level `pyicloud` login wrapper
-- [app/icloud/icloud_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/icloud_service.py): album and sort service, currently mocked
+- [app/icloud/icloud_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/icloud_service.py): album metadata and sort service orchestration
 - [app/icloud/albums_service.py](/home/mac/code/python/icloud-file-sorter/app/icloud/albums_service.py): adapter used by the bridge
 - [app/ui/index.html](/home/mac/code/python/icloud-file-sorter/app/ui/index.html): desktop UI shell
 - [app/ui/js/login.js](/home/mac/code/python/icloud-file-sorter/app/ui/js/login.js): login/2FA interactions
@@ -133,7 +135,8 @@ Guidelines:
 6. Keep secrets and auth session material out of the repo and out of plain JSON settings.
 7. For long-running sorting, keep progress polling compatible with the current UI unless intentionally redesigned.
 8. Keep album browsing lightweight; do local file scanning and cloud-to-local matching only inside the active sort job.
-9. Add startup validation before the main workflow when a feature depends on local machine prerequisites such as iCloud for Windows and the synced photos folder.
+9. Validate local machine prerequisites at the point of use. For sorting, require the configured source folder to exist, be readable, and be writable; treat iCloud for Windows installation detection as advisory.
+10. Never move or copy sorted album output outside the configured source folder. The current Windows default is `C:\Users\USER\Pictures\iCloud Photos\Photos`.
 
 ## Testing Expectations
 
@@ -148,10 +151,10 @@ Frontend:
 - Keep JS tests aligned with actual DOM wiring.
 - If the UI API changes, update the frontend tests in the same change.
 
-Current test caveats observed during analysis:
+Current test status observed during recent work:
 
-- `pytest` could not be run in this environment because `pytest` is not installed.
-- `npm test` runs, but the existing login tests fail because they no longer match the current UI/module wiring.
+- `pytest` runs in this environment.
+- `npm test` runs from `frontend/`.
 
 ## CI/CD Direction
 
@@ -166,9 +169,8 @@ Do not assume the website serves the binaries itself. S3 is the artifact source 
 
 ## Near-Term Implementation Priorities
 
-1. Replace mocked album/sort logic with real `pyicloud` album discovery and sort-time local file matching.
-2. Add startup prerequisite detection for iCloud for Windows installation and local folder availability.
-3. Introduce JSON-backed settings/state storage.
-4. Add safe filesystem sorting with progress tracking and resumability.
-5. Fix test drift so the suite reflects the current app behavior.
-6. Add packaging and S3 release automation once the app flow is stable.
+1. Finish Epic 5 integration validation for real sorting, including restart behavior, large-job cancellation, and recursive re-sort behavior.
+2. Keep source-folder handling strict: default to `C:\Users\USER\Pictures\iCloud Photos\Photos`, migrate the parent folder to its `Photos` child when safe, and keep album folders inside that source root.
+3. Continue hardening JSON-backed settings/state storage.
+4. Update user-facing docs for real sorting, copy-mode storage impact, and cancellation semantics.
+5. Add packaging and S3 release automation once the app flow is stable.

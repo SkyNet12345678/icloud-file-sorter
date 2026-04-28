@@ -1,15 +1,17 @@
 import base64
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from app.scanner import LocalScanner
+from app.sorting.file_operations import STATUS_READY, validate_destination_folder
+from app.sorting.sort_job import SortJobManager
+from app.state.sort_state import SortStateStore
 
 logger = logging.getLogger("icloud-sorter")
 
-DEFAULT_MOCK_SORT_TOTAL = 1847
 FAILED_TO_LOAD_ALBUM_ASSETS = "Failed to load album assets"
 
 
@@ -18,10 +20,14 @@ def _album_type_name(album):
 
 
 class ICloudService:
-    def __init__(self, api, settings_service=None):
+    def __init__(self, api, settings_service=None, sort_job_manager=None):
         self.api = api
         self.settings_service = settings_service
-        self.jobs = {}
+        self.sort_job_manager = sort_job_manager or SortJobManager(
+            state_store=self._build_sort_state_store(),
+            run_async=True,
+        )
+        self.jobs = self.sort_job_manager.jobs
         self.album_cache_loaded = False
         self.album_list_cache = []
         self.album_summaries_by_id = {}
@@ -58,57 +64,26 @@ class ICloudService:
         except RuntimeError as exc:
             return {"error": str(exc)}
 
-        selected_albums = self._resolve_selected_album_names(selected_ids)
+        selected_albums = self._resolve_selected_album_records(selected_ids)
+        sorting_approach = self._get_sorting_approach()
 
-        job_id = str(uuid.uuid4())
-        self.jobs[job_id] = {
-            "job_id": job_id,
-            "status": "matching",
-            "processed": 0,
-            "total": 0,
-            "percent": 0,
-            "selected_album_ids": selected_ids,
-            "selected_albums": selected_albums,
-            "selected_assets": [],
-            "matched_assets": [],
-            "source_folder": source_folder,
-            "match_results": self._empty_match_results(),
-            "message": self._build_preparing_message(),
-            "_matching_reported": False,
-            "_matching_prepared": False,
-            "_matching_fetch_in_progress": False,
-            "_matching_completed": False,
-        }
-
-        return {"job_id": job_id}
+        return self.sort_job_manager.start_job(
+            job_id=str(uuid.uuid4()),
+            selected_album_ids=selected_ids,
+            selected_albums=selected_albums,
+            source_folder=source_folder,
+            sorting_approach=sorting_approach,
+            asset_loader=lambda: self.get_assets_for_album_ids(
+                selected_ids,
+                force_refresh=True,
+            ),
+        )
 
     def get_sort_progress(self, job_id):
-        job = self.jobs.get(job_id)
+        return self.sort_job_manager.get_progress(job_id)
 
-        if not job:
-            return {
-                "job_id": job_id,
-                "status": "error",
-                "processed": 0,
-                "total": 0,
-                "percent": 0,
-                "message": "Unknown job id",
-            }
-
-        if job["status"] == "matching":
-            return self._advance_matching_job(job)
-
-        if job["status"] == "running":
-            job["processed"] = min(job["processed"] + 50, job["total"])
-            job["percent"] = int((job["processed"] / job["total"]) * 100) if job["total"] else 100
-            job["message"] = self._build_processing_message(job)
-
-            if job["processed"] >= job["total"]:
-                job["status"] = "complete"
-                job["percent"] = 100
-                job["message"] = self._build_complete_message(job)
-
-        return self._copy_job_progress(job)
+    def cancel_sort(self, job_id):
+        return self.sort_job_manager.cancel_job(job_id)
 
     def get_cached_album(self, album_id):
         self._require_album_cache_loaded()
@@ -470,12 +445,31 @@ class ICloudService:
 
         return unique_ids
 
-    def _resolve_selected_album_names(self, selected_album_ids):
+    def _resolve_selected_album_records(self, selected_album_ids):
         return [
-            self.album_summaries_by_id[album_id]["name"]
+            {
+                "id": album_id,
+                "name": self.album_summaries_by_id[album_id]["name"],
+            }
             for album_id in selected_album_ids
             if album_id in self.album_summaries_by_id
         ]
+
+    def _get_sorting_approach(self):
+        if self.settings_service is None:
+            return "first"
+        get_sorting_approach = getattr(self.settings_service, "get_sorting_approach", None)
+        if not callable(get_sorting_approach):
+            return "first"
+        return get_sorting_approach()
+
+    def _build_sort_state_store(self):
+        if self.settings_service is None:
+            return None
+        get_app_data_dir = getattr(self.settings_service, "get_app_data_dir", None)
+        if not callable(get_app_data_dir):
+            return None
+        return SortStateStore(settings_service=self.settings_service)
 
     def _filter_known_album_ids(self, selected_album_ids):
         self._require_album_cache_loaded()
@@ -986,141 +980,6 @@ class ICloudService:
             ],
         }
 
-    def _copy_job_progress(self, job):
-        progress_keys = (
-            "job_id",
-            "status",
-            "processed",
-            "total",
-            "percent",
-            "message",
-        )
-        progress = {
-            key: job[key]
-            for key in progress_keys
-        }
-        progress["match_results"] = self._copy_match_results_summary(
-            job.get("match_results")
-        )
-        return progress
-
-    def _advance_matching_job(self, job):
-        if not job.get("_matching_reported"):
-            job["_matching_reported"] = True
-            return self._copy_job_progress(job)
-
-        if not job.get("_matching_prepared"):
-            if job.get("_matching_fetch_in_progress"):
-                return self._copy_job_progress(job)
-
-            job["_matching_fetch_in_progress"] = True
-            try:
-                asset_result = self.get_assets_for_album_ids(
-                    job["selected_album_ids"],
-                    force_refresh=True,
-                )
-            finally:
-                job["_matching_fetch_in_progress"] = False
-
-            if not asset_result.get("success"):
-                job["status"] = "error"
-                job["processed"] = 0
-                job["total"] = 0
-                job["percent"] = 0
-                job["message"] = asset_result.get("error") or FAILED_TO_LOAD_ALBUM_ASSETS
-                return self._copy_job_progress(job)
-
-            selected_assets = asset_result["assets"]
-            job["selected_assets"] = selected_assets
-            job["processed"] = 0
-            job["total"] = len(selected_assets)
-            job["percent"] = 0
-            job["message"] = self._build_matching_message(selected_assets)
-            job["_matching_prepared"] = True
-            return self._copy_job_progress(job)
-
-        if not job.get("_matching_completed"):
-            try:
-                scanner = LocalScanner(job["source_folder"])
-                scanner.scan()
-                job["match_results"] = scanner.match_assets(job["selected_assets"])
-                job["matched_assets"] = [
-                    dict(asset)
-                    for asset in job["match_results"]["assets"]
-                ]
-            except Exception as exc:
-                logger.exception("Failed to match local files for job %s: %s", job["job_id"], exc)
-                job["status"] = "error"
-                job["processed"] = 0
-                job["total"] = 0
-                job["percent"] = 0
-                job["message"] = "Failed to scan the local source folder for matching files"
-                return self._copy_job_progress(job)
-
-            job["_matching_completed"] = True
-
-        job["status"] = "running"
-        job["processed"] = 0
-        job["total"] = DEFAULT_MOCK_SORT_TOTAL
-        job["percent"] = 0
-        job["message"] = self._build_running_message(job)
-        return self._copy_job_progress(job)
-
-    def _build_matching_message(self, selected_assets):
-        asset_count = len(selected_assets)
-        suffix = "asset" if asset_count == 1 else "assets"
-        return f"Fetched iCloud metadata for {asset_count} {suffix}. Matching local files..."
-
-    def _build_preparing_message(self):
-        return "Preparing matching job..."
-
-    def _build_running_message(self, job):
-        match_results = self._copy_match_results_summary(job.get("match_results"))
-        return (
-            f"Starting sort for {len(job['selected_album_ids'])} album(s). "
-            f"{self._build_match_quality_message(match_results)}"
-        )
-
-    def _empty_match_results(self):
-        return {
-            "matched": 0,
-            # Kept for bridge compatibility until a verified fallback strategy exists.
-            "fallback_matched": 0,
-            "not_found": 0,
-            "ambiguous": 0,
-            "assets": [],
-        }
-
-    def _copy_match_results_summary(self, match_results):
-        summary = self._empty_match_results()
-        if isinstance(match_results, dict):
-            for key in ("matched", "fallback_matched", "not_found", "ambiguous"):
-                try:
-                    summary[key] = int(match_results.get(key, 0))
-                except (TypeError, ValueError):
-                    summary[key] = 0
-        summary.pop("assets")
-        return summary
-
-    def _build_processing_message(self, job):
-        match_results = self._copy_match_results_summary(job.get("match_results"))
-        return (
-            f"Processing photo {job['processed']} of {job['total']}. "
-            f"{self._build_match_quality_message(match_results)}"
-        )
-
-    def _build_complete_message(self, job):
-        match_results = self._copy_match_results_summary(job.get("match_results"))
-        return f"Sort complete. {self._build_match_quality_message(match_results)}"
-
-    def _build_match_quality_message(self, match_results):
-        return (
-            "Filename-only matching: "
-            f"Exact: {match_results['matched']} | "
-            f"Not found: {match_results['not_found']} | "
-            f"Ambiguous: {match_results['ambiguous']}"
-        )
-
     def _require_source_folder(self):
         source_folder = None
         if self.settings_service is not None:
@@ -1139,6 +998,16 @@ class ICloudService:
         if not source_path.is_dir():
             raise RuntimeError(
                 "Configured source folder is not a folder. Update the source folder in Settings before starting a sort."
+            )
+        if not os.access(source_path, os.R_OK):
+            raise RuntimeError(
+                "Configured source folder cannot be read. Check folder permissions in Windows and update Settings if needed."
+            )
+
+        write_check = validate_destination_folder(source_path)
+        if write_check["status"] != STATUS_READY:
+            raise RuntimeError(
+                "Configured source folder cannot be written to. Choose a writable iCloud Photos folder in Settings before starting a sort."
             )
 
         return str(source_path)

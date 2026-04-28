@@ -4,6 +4,8 @@ from app.icloud.icloud_service import ICloudService
 
 logger = logging.getLogger("icloud-sorter")
 
+SORTING_SERVICE_UNAVAILABLE = "Sorting service unavailable"
+
 
 class AlbumsService:
     def __init__(self, icloud_api, settings_service=None):
@@ -50,7 +52,7 @@ class AlbumsService:
     def start_sort(self, selected_album_ids):
         if not self.icloud:
             logger.warning("start_sort called but icloud service is not initialized")
-            return {"error": "Sorting service unavailable"}
+            return {"error": SORTING_SERVICE_UNAVAILABLE}
 
         try:
             logger.info("Starting sort for %d selected album ids", len(selected_album_ids))
@@ -68,7 +70,7 @@ class AlbumsService:
                 "processed": 0,
                 "total": 0,
                 "percent": 0,
-                "message": "Sorting service unavailable",
+                "message": SORTING_SERVICE_UNAVAILABLE,
             }
 
         try:
@@ -82,6 +84,31 @@ class AlbumsService:
                 "total": 0,
                 "percent": 0,
                 "message": "Failed to get sort progress",
+            }
+
+    def cancel_sort(self, job_id):
+        if not self.icloud:
+            logger.warning("cancel_sort called but icloud service is not initialized")
+            return {
+                "job_id": job_id,
+                "status": "error",
+                "processed": 0,
+                "total": 0,
+                "percent": 0,
+                "message": SORTING_SERVICE_UNAVAILABLE,
+            }
+
+        try:
+            return self.icloud.cancel_sort(job_id)
+        except Exception as exc:
+            logger.exception("Failed to cancel sort: %s", exc)
+            return {
+                "job_id": job_id,
+                "status": "error",
+                "processed": 0,
+                "total": 0,
+                "percent": 0,
+                "message": "Failed to cancel sort",
             }
 
     def _album_failure(self, error_message):

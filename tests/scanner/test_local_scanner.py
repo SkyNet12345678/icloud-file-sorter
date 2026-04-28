@@ -39,6 +39,25 @@ def test_scan_builds_recursive_filename_index(tmp_path):
     }
 
 
+def test_scan_stops_when_cancellation_is_requested(tmp_path):
+    for index in range(3):
+        (tmp_path / f"IMG_000{index}.HEIC").write_text(str(index), encoding="utf-8")
+
+    checks = 0
+
+    def cancel_after_first_path():
+        nonlocal checks
+        checks += 1
+        return checks > 1
+
+    scanner = LocalScanner(tmp_path, cancel_requested=cancel_after_first_path)
+
+    scanned_files = scanner.scan()
+
+    assert len(scanned_files) <= 1
+    assert checks >= 2
+
+
 def test_normalize_filename_is_case_insensitive_and_uses_basename_only():
     assert normalize_filename("IMG_0001.HEIC") == "img_0001.heic"
     assert normalize_filename("nested/IMG_0001.HEIC") == "img_0001.heic"

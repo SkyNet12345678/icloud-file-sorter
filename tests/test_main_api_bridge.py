@@ -126,6 +126,39 @@ def test_api_get_sort_progress_delegates_to_albums_service(main_module):
     api.albums_service.get_sort_progress.assert_called_once_with("job-123")
 
 
+def test_api_cancel_sort_returns_error_when_service_is_unavailable(main_module):
+    api = main_module.API()
+
+    result = api.cancel_sort("job-123")
+
+    assert result == {
+        "job_id": "job-123",
+        "status": "error",
+        "processed": 0,
+        "total": 0,
+        "percent": 0,
+        "message": "Sorting service unavailable",
+    }
+
+
+def test_api_cancel_sort_delegates_to_albums_service(main_module):
+    api = main_module.API()
+    api.albums_service = MagicMock()
+    api.albums_service.cancel_sort.return_value = {
+        "job_id": "job-123",
+        "status": "cancelling",
+        "processed": 1,
+        "total": 10,
+        "percent": 10,
+        "message": "Cancelling sort after the current file operation...",
+    }
+
+    result = api.cancel_sort("job-123")
+
+    assert result["status"] == "cancelling"
+    api.albums_service.cancel_sort.assert_called_once_with("job-123")
+
+
 def test_api_get_albums_empty_success_passthrough(main_module):
     api = main_module.API()
     api.albums_service = MagicMock()

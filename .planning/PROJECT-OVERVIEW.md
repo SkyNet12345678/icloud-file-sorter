@@ -27,7 +27,7 @@ The repository already contains a functional desktop shell and partial auth flow
 - the JS frontend calls Python through the pywebview `js_api`
 - Apple login is wired through `pyicloud`
 - 2FA verification is implemented
-- album loading and sorting are still mocked
+- album loading and sorting have real backend paths, with Epic 5 integration/docs hardening still in progress
 
 This matters because the repo should evolve from the current baseline rather than being rebuilt around a different stack.
 
@@ -81,14 +81,14 @@ The last two modules do not exist yet but should be added as the implementation 
 ## 5. End-to-End User Flow
 
 1. User opens the desktop app.
-2. App checks whether iCloud for Windows appears to be installed and whether the local iCloud Photos folder exists.
+2. App checks whether the configured local iCloud Photos `Photos` folder exists and is accessible; iCloud for Windows installation detection is advisory.
 3. If the prerequisite check fails, the app shows guidance and lets the user choose or confirm the folder path in settings.
 4. User signs in with Apple ID.
 5. If required, user completes 2FA.
 6. App fetches albums from iCloud.
 7. User selects albums to organize.
 8. User starts sorting for the selected albums.
-9. App scans the local iCloud Photos folder as part of that sort job.
+9. App scans the configured local source folder as part of that sort job. On Windows the default source folder is `C:\Users\USER\Pictures\iCloud Photos\Photos`.
 10. App matches local files against selected iCloud album assets during that job.
 11. App creates album folders and organizes matched files according to the selected multi-album behavior.
 12. App shows progress and a completion summary, including failures or unmatched files.
@@ -97,9 +97,9 @@ The last two modules do not exist yet but should be added as the implementation 
 
 On startup, the app should validate that the machine is ready before the user reaches the sorting flow.
 
-- check whether iCloud for Windows appears to be installed
-- check whether the expected iCloud Photos folder exists
-- if either check fails, show a clear prerequisite/setup message instead of failing later during sorting
+- check whether the expected iCloud Photos `Photos` folder exists and can be read/written
+- treat iCloud for Windows installation/running-state detection as advisory, not a hard blocker when the source folder is accessible
+- if folder validation fails, show a clear prerequisite/setup message instead of failing later during sorting
 - allow the user to point the app at the correct local folder if auto-detection is incomplete
 - store the confirmed folder path in settings JSON
 
@@ -109,13 +109,16 @@ The central product assumption is that files already exist locally because iClou
 
 Expected source folder behavior:
 
-- primary target is the local iCloud Photos sync folder
+- primary target is the local iCloud Photos sync folder that contains the synced photo files
+- on Windows the default source folder is `C:\Users\USER\Pictures\iCloud Photos\Photos`, not the parent `C:\Users\USER\Pictures\iCloud Photos`
+- if settings contain the parent `iCloud Photos` folder and its `Photos` child exists, normalize the setting to the `Photos` child
+- album folders must be created inside the configured source folder, for example `C:\Users\mac\Pictures\iCloud Photos\Photos\Trips`
 - users may need to confirm or override the path in settings
 - the app should not require a separate export folder to deliver MVP value
 
 Default discovery options:
 
-- common iCloud for Windows folders on Windows
+- `C:\Users\USER\Pictures\iCloud Photos\Photos` on Windows
 - optional user-selected override path stored in settings JSON
 - startup validation that confirms the folder still exists before continuing
 
@@ -180,10 +183,9 @@ Suggested fields:
 ```json
 {
   "schema_version": 1,
-  "icloud_photos_path": null,
-  "last_used_apple_id": null,
-  "sort_mode": "move",
-  "multi_album_mode": "move_first_selected_album"
+  "source_folder": null,
+  "sorting_approach": "first",
+  "remembered_apple_id": null
 }
 ```
 
@@ -191,8 +193,8 @@ Notes:
 
 - do not store passwords
 - be cautious with session identifiers and trust tokens
-- `sort_mode` may later support `copy` if needed, but MVP can remain `move`
-- `multi_album_mode` should default to `move_first_selected_album` and later allow `copy_to_each_album`
+- `sorting_approach` uses `first` by default and `copy` as the initial alternative
+- `source_folder` stores the sortable root, normally `C:\Users\USER\Pictures\iCloud Photos\Photos` on Windows
 
 ### State JSON
 
@@ -236,6 +238,8 @@ Existing bridge methods:
 - `get_albums()`
 - `start_sort(selected_album_ids)`
 - `get_sort_progress(job_id)`
+- `cancel_sort(job_id)`
+- `get_settings()` / `save_settings(...)` / `detect_source_folder()`
 
 Recommended evolution:
 
@@ -265,8 +269,7 @@ Working:
 
 Gaps:
 
-- album data is mocked in `app/icloud/icloud_service.py`
-- no real iCloud album enumeration yet
+- continue validating real iCloud album enumeration against live accounts and edge-case album shapes
 
 ### Sorting
 
@@ -277,20 +280,18 @@ Working:
 
 Gaps:
 
-- sort jobs are mocked
-- no local file scan, matching, folder creation, or move logic exists yet
-- cancellation is UI-only and not implemented in Python
+- continue validating recursive re-sort behavior, copy tracking, and cancellation on large real libraries
+- keep album folders anchored inside the configured source folder
 
 ### Persistence
 
 Working:
 
-- none beyond in-memory runtime objects
+- JSON-backed settings and sort state exist
 
 Gaps:
 
-- no JSON persistence layer yet
-- current repo `settings.json` is editor config, not app configuration
+- continue hardening recovery from corrupted/stale JSON state
 
 ### Testing
 
@@ -300,8 +301,7 @@ Working:
 
 Gaps:
 
-- Python test tooling is not installed in the current environment
-- frontend login tests are out of date and currently failing
+- keep Python and frontend test suites aligned with the current bridge/UI behavior
 
 ## 11. Non-Goals For Now
 
@@ -313,7 +313,7 @@ Gaps:
 
 ## 12. Open Decisions To Revisit Later
 
-- whether sorting is strictly `move` in MVP or whether `copy` should exist
+- how much detail the user-facing skipped/error report should show initially
 - how much session persistence `pyicloud` should support between launches
 - exact packaging tool for Windows release builds
 - whether cancellation is a real MVP feature or a post-MVP feature
