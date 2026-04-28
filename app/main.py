@@ -1,7 +1,7 @@
 import webview
 
 from app.api.auth_api import AuthApi
-from app.icloud.albums_service import AlbumsService
+from app.icloud.albums_service import AlbumsService, SORTING_SERVICE_UNAVAILABLE
 from app.logger import setup_logger
 from app.settings import SettingsService
 
@@ -82,7 +82,7 @@ class API:
 
     def start_sort(self, selected_album_ids):
         if not self.albums_service:
-            return {"error": "Sorting service unavailable"}
+            return {"error": SORTING_SERVICE_UNAVAILABLE}
         return self.albums_service.start_sort(selected_album_ids)
 
     def get_sort_progress(self, job_id):
@@ -93,7 +93,7 @@ class API:
                 "processed": 0,
                 "total": 0,
                 "percent": 0,
-                "message": "Sorting service unavailable",
+                "message": SORTING_SERVICE_UNAVAILABLE,
             }
         return self.albums_service.get_sort_progress(job_id)
 
@@ -105,7 +105,7 @@ class API:
                 "processed": 0,
                 "total": 0,
                 "percent": 0,
-                "message": "Sorting service unavailable",
+                "message": SORTING_SERVICE_UNAVAILABLE,
             }
         return self.albums_service.cancel_sort(job_id)
 
