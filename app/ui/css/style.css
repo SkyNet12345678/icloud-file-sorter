@@ -221,6 +221,27 @@ body, html {
   display: none !important;
 }
 
+.settings-section h3 {
+  border-bottom: 1px solid #666;
+  padding-bottom: 4px;
+  margin-bottom: 16px;
+}
+
+#source-folder-input {
+  width: 100%;
+  padding: 10px;
+  font-size: 1rem;
+  margin-bottom: 16px;
+}
+
+#sorting-approach {
+  width: 100%;
+  padding: 10px;
+  font-size: 1rem;
+  margin-bottom: 16px;
+}
+
+
 .sort-progress {
   display: flex;
   flex-direction: column;
